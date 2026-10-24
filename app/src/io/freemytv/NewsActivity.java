@@ -6,12 +6,16 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.webkit.CookieManager;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
+import android.webkit.WebStorage;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
@@ -20,32 +24,58 @@ import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
- * A story from the home screen's News card. The page loads hidden; its cookie banner is answered "reject" (or "only
- * necessary") and the story's text is laid out for the TV in two columns that turn like pages (assets/reader). A page
- * that doesn't look like an article shows as it is, fitted to the screen. Back always goes home: the story came through
- * a news.google.com link that would only forward to it again.
+ * A story from the home screen's News card. The story's address comes straight from Google (GoogleNews), not through
+ * its forwarding page; the story's page loads hidden with only what has text in it (no pictures, fonts, styles, video,
+ * ads or trackers), its cookie banner is answered "reject" (or "only necessary"), and its text is laid out for the TV
+ * in columns that turn like pages (assets/reader). A page that doesn't look like an article shows as it is. Nothing of
+ * it is kept: no cache, no history, no site storage. Back always goes home.
  */
 public final class NewsActivity extends Activity {
     static final String EXTRA_URL = "url";
-    /** When the hidden page is read: early ones catch a page whose ads never finish loading. */
-    private static final long[] TRIES = {2500, 5000, 8000};
-    private static final long GIVE_UP = 12_000;
+    /** How often the hidden page is read, and when it is shown as it is instead. */
+    private static final long POLL = 400, GIVE_UP = 10_000;
+
+    private static final Pattern NOT_TEXT = Pattern.compile(
+            ".*\\.(jpe?g|png|gif|webp|avif|svg|ico|bmp|woff2?|ttf|otf|eot|css|mp4|webm|m3u8|mpd|mp3|m4a|ts)(\\?.*)?$");
+    /** Ads, trackers and widgets: never needed for a story's text, and they are most of a news page's loading. */
+    private static final String[] BLOCKED = {
+        "doubleclick.net", "googlesyndication.com", "googleadservices.com", "google-analytics.com",
+        "googletagmanager.com", "googletagservices.com", "adservice.google.", "imasdk.googleapis.com",
+        "amazon-adsystem.com", "taboola.com", "outbrain.com", "criteo.", "facebook.net", "facebook.com/tr",
+        "scorecardresearch.com", "chartbeat.", "hotjar.", "moatads.com", "adnxs.com", "pubmatic.com",
+        "rubiconproject.com", "openx.net", "casalemedia.com", "quantserve.com", "quantcount.com", "newrelic.com",
+        "nr-data.net", "izooto.com", "onesignal.com", "clarity.ms", "bat.bing.com", "clmbtech.com",
+        "colombiaonline.com", "vdo.ai", "jwplayer.com", "jwpcdn.com", "brightcove.", "youtube.com/embed",
+        "twitter.com/widgets", "platform.twitter.com", "instagram.com/embed", "sharethis.com", "addthis.com",
+        "disqus.com", "cdn.pushengage.com", "sentry.io", "segment.io", "mixpanel.com", "branch.io",
+        "permutive.", "lotame.com", "bluekai.com", "demdex.net", "omtrdc.net", "krxd.net", "teads.tv",
+        "sharethrough.com", "media.net", "yieldmo.com", "smartadserver.com", "adsrvr.org", "3lift.com"
+    };
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private WebView web;
     private TextView loading;
     private String cookies, extract, template;
-    private boolean reader, shown;
-    private String article;   // the story's address, once news.google.com has forwarded to it
+    private volatile boolean reader;
+    private boolean shown, polling, destroyed;
+    private String article;   // the story's address
+    private String lastRead = "";
+    private int reads;   // readings in a row that found a story
+    private long t0;   // when the story was asked for (for the log: how long it took)
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        t0 = SystemClock.elapsedRealtime();
         String url = getIntent().getStringExtra(EXTRA_URL);
         if (url == null || !url.startsWith("https://")) {
             finish();
@@ -58,33 +88,6 @@ public final class NewsActivity extends Activity {
         } catch (IOException e) {
             AppLog.w("news: " + e.getMessage());
         }
-        web = new WebView(this);
-        WebSettings s = web.getSettings();
-        s.setJavaScriptEnabled(true);   // news.google.com's links forward to the story with a script
-        s.setDomStorageEnabled(true);
-        s.setUseWideViewPort(true);      // a page shown as it is: fitted to the TV's width
-        s.setLoadWithOverviewMode(true);
-        s.setTextZoom(100);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);   // no ad and tracking cookies
-        web.setBackgroundColor(0xFF121214);
-        web.setVisibility(View.INVISIBLE);
-        web.setWebViewClient(new WebViewClient() {
-            @Override public void onPageStarted(WebView view, String url, Bitmap favicon) {
-                if (reader || !isStory(url)) return;
-                article = url;
-                main.removeCallbacksAndMessages(null);
-                for (long at : TRIES) main.postDelayed(() -> tryReader(false), at);
-                main.postDelayed(() -> tryReader(true), GIVE_UP);
-            }
-
-            @Override public void onPageFinished(WebView view, String url) {
-                if (reader) {
-                    show();
-                } else if (isStory(url)) {
-                    main.postDelayed(() -> tryReader(false), 800);
-                }
-            }
-        });
 
         loading = new TextView(this);
         loading.setText("Loading the story…");
@@ -93,11 +96,96 @@ public final class NewsActivity extends Activity {
         loading.setGravity(Gravity.CENTER);
         loading.setBackgroundColor(0xFF121214);
         FrameLayout root = new FrameLayout(this);
+        web = new WebView(this);
         root.addView(web);
         root.addView(loading);
         setContentView(root);
-        web.requestFocus();
+        setUp(web);
+
+        // The real address: known already (the card asked while the headline was chosen), or asked now, in parallel.
+        String known = GoogleNews.known(url);
+        if (known != null) {
+            open(known);
+        } else if (GoogleNews.isGoogle(url)) {
+            new Thread(() -> {
+                String story;
+                try {
+                    story = GoogleNews.resolve(url);
+                } catch (Exception e) {
+                    AppLog.w("news: address via Google's page (" + e.getMessage() + ")");
+                    story = url;   // the old way: news.google.com's page forwards to it
+                }
+                String to = story;
+                main.post(() -> { if (!destroyed) open(to); });
+            }, "news-address").start();
+        } else {
+            open(url);
+        }
+        main.postDelayed(this::giveUp, GIVE_UP);
+    }
+
+    private void setUp(WebView w) {
+        WebSettings s = w.getSettings();
+        s.setJavaScriptEnabled(true);    // many sites write their stories with scripts
+        s.setDomStorageEnabled(true);    // some break without it; it's wiped when the story closes
+        s.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        s.setLoadsImagesAutomatically(true);
+        s.setUseWideViewPort(true);      // a page shown as it is: fitted to the TV's width
+        s.setLoadWithOverviewMode(true);
+        s.setTextZoom(100);
+        s.setMediaPlaybackRequiresUserGesture(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(w, false);   // no ad and tracking cookies
+        w.setBackgroundColor(0xFF121214);
+        w.setVisibility(View.INVISIBLE);
+        w.setWebViewClient(new WebViewClient() {
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                return blocked(request) ? empty() : null;
+            }
+
+            @Override public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                if (reader || !isStory(url)) return;
+                article = url;
+                lastRead = "";
+                reads = 0;
+                if (!polling) {
+                    polling = true;
+                    main.postDelayed(NewsActivity.this::poll, POLL);
+                }
+            }
+
+            @Override public void onPageCommitVisible(WebView view, String url) {
+                if (reader) show();   // the text is drawn: the story's picture can come in after
+            }
+
+            @Override public void onPageFinished(WebView view, String url) {
+                if (reader) show();
+            }
+        });
+    }
+
+    private void open(String url) {
         web.loadUrl(url);
+    }
+
+    /**
+     * While the hidden page reads: what's only for the eye (pictures, fonts, styles, video) and ads and trackers are
+     * answered empty. The reader page, after, loads its one picture.
+     */
+    private boolean blocked(WebResourceRequest r) {
+        if (reader || r.isForMainFrame()) return false;
+        String url = r.getUrl().toString().toLowerCase(Locale.ROOT);
+        for (String host : BLOCKED) if (url.contains(host)) return true;
+        if (NOT_TEXT.matcher(r.getUrl().getPath() == null ? "" : r.getUrl().getPath().toLowerCase(Locale.ROOT)).matches()) return true;
+        Map<String, String> h = r.getRequestHeaders();
+        String accept = h == null ? null : h.get("Accept");
+        return accept != null && (accept.startsWith("image/") || accept.startsWith("text/css") || accept.startsWith("video/")
+                || accept.startsWith("audio/") || accept.startsWith("font/"));
+    }
+
+    private static WebResourceResponse empty() {
+        WebResourceResponse r = new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
+        r.setStatusCodeAndReasonPhrase(204, "No Content");
+        return r;
     }
 
     private static boolean isStory(String url) {
@@ -105,22 +193,42 @@ public final class NewsActivity extends Activity {
         return host != null && url.startsWith("https://") && !host.equals("news.google.com") && !host.endsWith("consent.google.com");
     }
 
-    /** Answers the cookie banner, then reads the story; `last`: when it isn't an article, show the page as it is. */
-    private void tryReader(boolean last) {
-        if (reader || shown || web == null || cookies == null) return;
+    /**
+     * Every POLL ms: answers the cookie banner and reads the story. Taken once the page is parsed and its text read the
+     * same twice in a row (or the page has finished): a page that writes its story with a script is read whole.
+     */
+    private void poll() {
+        if (reader || shown || destroyed || cookies == null) {
+            polling = false;
+            return;
+        }
         web.evaluateJavascript(cookies, null);
-        web.evaluateJavascript(extract, value -> {
-            if (reader || shown) return;
-            String html = value == null || value.equals("null") || value.equals("\"\"") ? null : build(value);
-            if (html != null) {
-                reader = true;
-                main.removeCallbacksAndMessages(null);
-                web.loadDataWithBaseURL(article, html, "text/html", "utf-8", null);
-            } else if (last) {
-                web.evaluateJavascript(cookies, null);
-                show();
+        web.evaluateJavascript("document.readyState", state -> web.evaluateJavascript(extract, value -> {
+            if (reader || shown || destroyed) return;
+            boolean some = value != null && !value.equals("null") && !value.equals("\"\"");
+            boolean complete = "\"complete\"".equals(state), parsed = complete || "\"interactive\"".equals(state);
+            reads = some ? reads + 1 : 0;
+            // A page whose text keeps changing (a live ticker, "updated 5 s ago") is taken at the third reading.
+            if (some && parsed && (value.equals(lastRead) || complete || reads >= 3)) {
+                String html = build(value);
+                if (html != null) {
+                    reader = true;
+                    polling = false;
+                    web.stopLoading();
+                    web.loadDataWithBaseURL(article, html, "text/html", "utf-8", null);
+                    return;
+                }
             }
-        });
+            lastRead = some ? value : "";
+            main.postDelayed(this::poll, POLL);
+        }));
+    }
+
+    /** Not an article (or nothing found in time): the page as it is. */
+    private void giveUp() {
+        if (reader || shown || destroyed) return;
+        if (cookies != null) web.evaluateJavascript(cookies, null);
+        show();
     }
 
     /** The reader page from extract.js's answer (a JSON string inside a JS string), or null. */
@@ -150,6 +258,8 @@ public final class NewsActivity extends Activity {
         if (shown) return;
         shown = true;
         main.removeCallbacksAndMessages(null);
+        AppLog.w("news: " + (reader ? "story" : "page as it is") + " shown in " + (SystemClock.elapsedRealtime() - t0) + " ms"
+                + (article == null ? "" : " (" + Uri.parse(article).getHost() + ")"));
         web.setVisibility(View.VISIBLE);
         loading.setVisibility(View.GONE);
         web.requestFocus();
@@ -183,8 +293,17 @@ public final class NewsActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        destroyed = true;
         main.removeCallbacksAndMessages(null);
-        if (web != null) web.destroy();
+        if (web != null) {
+            // Nothing of the story stays on the TV.
+            web.stopLoading();
+            web.clearCache(true);
+            web.clearHistory();
+            web.clearFormData();
+            WebStorage.getInstance().deleteAllData();
+            web.destroy();
+        }
         super.onDestroy();
     }
 }

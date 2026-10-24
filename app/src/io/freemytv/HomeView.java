@@ -2545,7 +2545,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     int top = Math.max(0, Math.min(last, newsTop + dx * NEWS_ROWS));
                     if (top == newsTop) return;
                     newsTop = newsSel = top;
-                } else if (dy > 0) {    // the next headline, scrolling one at a time past the last row
+                } else if (dy > 0) {    // the next headline, scrolling one at a time past the last row (newsAhead, after move)
                     if (newsSel >= n - 1) return;
                     newsSel++;
                     if (newsSel >= newsTop + NEWS_ROWS) newsTop = newsSel - NEWS_ROWS + 1;
@@ -2621,6 +2621,34 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         retarget(false);
         click.move();
+        if (zone == Z_NEWS) newsAhead();
+    }
+
+    private final Runnable resolveChosen = this::resolveChosen;
+
+    private void resolveChosen() {
+        List<HomeData.Headline> list = data.news;
+        if (zone == Z_NEWS && newsSel < list.size()) GoogleNews.ahead(list.get(newsSel).link);
+    }
+    private boolean webWarm;
+
+    /**
+     * The remote rests on a headline: its story's address is asked of Google ahead (kept in memory only), and the first
+     * time, the WebView engine is loaded in the background, so OK opens the story without either wait.
+     */
+    private void newsAhead() {
+        handler.removeCallbacks(resolveChosen);
+        handler.postDelayed(resolveChosen, 500);
+        if (webWarm) return;
+        webWarm = true;
+        Context app = getContext().getApplicationContext();
+        new Thread(() -> {
+            try {
+                android.webkit.WebSettings.getDefaultUserAgent(app);
+            } catch (Throwable ignored) {
+                // no WebView on this TV: the story will say so
+            }
+        }, "webview-warm").start();
     }
 
     private static int nearest(RectF[] rects, float x) {

@@ -190,11 +190,8 @@ final class HomeData {
                 weatherAt = cache.getLong("weatherAt", 0);
                 weatherFor = weatherPlace();
             }
-            if (Config.SHOW_NEWS && Config.NEWS_FEED.equals(cache.getString("newsFeed", ""))) {
-                String n = cache.getString("news", null);
-                if (n != null) news = parseNews(n);
-                newsAt = cache.getLong("newsAt", 0);
-            }
+            // The news is kept in memory only (fetched again when the home screen starts): what an older version saved goes.
+            if (cache.contains("news")) cache.edit().remove("news").remove("newsAt").remove("newsFeed").apply();
         } catch (Exception ignored) {}
     }
 
@@ -260,7 +257,6 @@ final class HomeData {
                     if (list.isEmpty()) throw new IOException("no headlines");
                     news = list;
                     newsAt = System.currentTimeMillis();
-                    cache.edit().putString("news", body).putLong("newsAt", newsAt).putString("newsFeed", Config.NEWS_FEED).apply();
                     notifyListeners();
                 } catch (Exception e) {
                     newsFailedAt = System.currentTimeMillis();
