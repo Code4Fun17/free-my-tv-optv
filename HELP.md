@@ -15,6 +15,10 @@ then measures again to see the difference. It works on any Google TV or Android 
 - Free My TV built from this repository and in *Free My TV* mode on the TV.
 - The TV's IP address. The examples use `192.168.1.50`: use yours.
 - **The TV restarts twice** (once to measure, once to compare). Do it when nobody is watching.
+- Optional: `log_buffer=1M` in `config.properties`. Many TVs keep only 256 KB of log, which Android's own startup
+  fills in a couple of minutes, and the lines this guide reads can be gone by the time you look. Free My TV sets the
+  size again after every boot (Android forgets it), about a minute and a half in. The events log, which holds the
+  `boot_progress` milestones, usually lasts the whole boot either way.
 
 ## What you can and can't change
 

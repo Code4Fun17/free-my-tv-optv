@@ -21,6 +21,7 @@ public class HomeActivity extends Activity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Watchdog.install(this);
+        bootCheckOnce();
         if (Watchdog.crashedTooOften(this)) {
             // Don't try to draw again: only show a notice while the main process restores the original home screen.
             HomeMode.requestRevertHome(this);
@@ -37,6 +38,19 @@ public class HomeActivity extends Activity {
         home = new HomeView(this);
         setContentView(home);
         getWindow().setBackgroundDrawable(null);
+    }
+
+    /**
+     * The boot check (HomeMode.bootCheck), once per boot, from the home screen too: some TVs never hand
+     * BOOT_COMPLETED to an app they don't know (HomeReceiver gets nothing), but the home screen starts after every boot.
+     * Android's boot counter tells a new boot from the home screen opening again; when both run, the job is one.
+     */
+    private void bootCheckOnce() {
+        int boots = android.provider.Settings.Global.getInt(getContentResolver(), android.provider.Settings.Global.BOOT_COUNT, -1);
+        android.content.SharedPreferences seen = getSharedPreferences("boot", MODE_PRIVATE);
+        if (boots < 0 || seen.getInt("checked", -1) == boots) return;
+        seen.edit().putInt("checked", boots).apply();
+        HomeMode.bootCheck(this);
     }
 
     @Override protected void onResume() {

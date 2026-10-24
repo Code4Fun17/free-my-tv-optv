@@ -253,6 +253,28 @@ final class HomeMode {
         }
     }
 
+    /** config.properties "log_buffer": a size like 1M or 512K, digits then K or M, and nothing else reaches the shell. */
+    private static final Pattern LOG_SIZE = Pattern.compile("[0-9]{1,4}[KM]");
+
+    /**
+     * Android's log buffers sized to config.properties "log_buffer" (empty: the TV's own size). Android forgets the
+     * size at every boot, so the boot check (and an update) sets it again; a wrong value is skipped and logged.
+     */
+    private static void logBuffer(Adb adb) {
+        String size = Config.LOG_BUFFER.trim().toUpperCase(java.util.Locale.ROOT);
+        if (size.isEmpty()) return;
+        if (!LOG_SIZE.matcher(size).matches()) {
+            AppLog.w("log buffer: \"" + Config.LOG_BUFFER + "\" isn't a size like 1M or 512K");
+            return;
+        }
+        try {
+            String out = adb.shell("logcat -G " + size);
+            if (!out.trim().isEmpty()) AppLog.w("log buffer: " + out.trim());
+        } catch (IOException e) {
+            AppLog.w("log buffer: " + e.getMessage());
+        }
+    }
+
     /** After an update of this app: complete Free My TV mode if anything is missing. */
     static void verify(Context c) {
         ModeJob.schedule(c, ModeJob.VERIFY, null, 0);
@@ -607,6 +629,7 @@ final class HomeMode {
             if (!FREE.equals(s.optString("mode")) || AMAZON) return;
             List<String> fixed = new ArrayList<>();
             try (Adb adb = Adb.connect(app, 10_000, null)) {
+                logBuffer(adb);
                 Set<String> present = packages(adb, "");
                 Set<String> disabledNow = packages(adb, "-d");
                 Set<String> owners = wifiOwners(adb);
