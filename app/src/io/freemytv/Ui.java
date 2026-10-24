@@ -47,7 +47,8 @@ final class Ui {
     static volatile String language = "en";
     /** Bumped when the language changes: text cached by the screens is made again. */
     static volatile int generation;
-    static Typeface thin, light, displayMedium, displaySemibold, regular, medium, semibold;
+    static Typeface thin, light, displayMedium, displaySemibold, regular, medium, semibold, bold;
+    private static float screenScale = 1;   // the screen's width / 1920 (the layout's k), for "small text" above
     private static boolean loaded;
     private static final Rect BOUNDS = new Rect();
     private static final RectF OVAL = new RectF();
@@ -56,6 +57,7 @@ final class Ui {
         if (loaded) return;
         loaded = true;
         AssetManager a = c.getAssets();
+        screenScale = c.getResources().getDisplayMetrics().widthPixels / 1920f;
         thin = font(a, 32, 200);
         light = font(a, 32, 300);
         displayMedium = font(a, 32, 500);
@@ -63,6 +65,7 @@ final class Ui {
         regular = font(a, 14, 400);
         medium = font(a, 14, 500);
         semibold = font(a, 14, 600);
+        bold = font(a, 14, 700);
     }
 
     /** Inter at an optical size (14 = text, 32 = display) and weight; the system font if the file is missing. */
@@ -304,6 +307,8 @@ final class Ui {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
         p.setTypeface(face);
         p.setTextSize(size);
+        // Small text, read from across the room (a TV), is a little easier with a little more room between letters.
+        if (size < 27 * screenScale) p.setLetterSpacing(0.012f);
         p.setColor(color);
         return p;
     }

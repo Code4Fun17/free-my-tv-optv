@@ -54,8 +54,11 @@ import java.util.function.Consumer;
  *    (Photos) the same way, or else a light gradient;
  *  - at the bottom, the glass shelf with the apps (icons in each brand's color, like the tvOS Dock; the focused one
  *    grows);
- *  - ↓ on the shelf: everything moves up and the bottom drawer appears (inputs, shortcuts, weather for the next hours
- *    and quotes with the 24 h change); the background lightens (darkens at night). ↑ or Back closes it;
+ *  - ↓ on the shelf: everything moves up and the bottom drawer appears (inputs, shortcuts, the weather card and the
+ *    news card, or the crypto quotes); the background lightens (darkens at night). ↑ or Back closes it;
+ *  - ↓ again: the card under the focused button takes the focus. ← → go from one card to the other in one press;
+ *    ↑ ↓ scroll inside it (the weather's hours, 8 at a time through the week; the news, a headline at a time), and
+ *    its arrows turn red at either end. OK opens the chosen story (NewsActivity);
  *  - from sunset to sunrise, a night look: dark background, smoked glass and white text.
  * Measurements are in a 1920×1080 space (k = width / 1920). The screen is split into layers so the TV's weak GPU only
  * redraws what changed.
@@ -103,6 +106,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static int tabsGeneration = -1;
     private static final String[] TAB_KIND = {null, "movie", "tv"};
     private static final int Z_TOP = 4, Z_CARDS = 5, Z_NEWS = 6, Z_WEATHER = 7;
+    /** A card's up or down arrow once that way has reached the end: bright red, plain on the day and the night look. */
+    private static final int END_RED = 0xFFFF3B30;
     /** The weather card's icon (point size) and where its center sits, its temperature and the conditions line. */
     private static final float WX_ICON = 34, WX_ICON_Y = 128, WX_TEMP_BASE = 152, WX_LINE_BASE = 226;
     /** Width of the weather card's left part (now), and the hours shown at once; the rest scroll in. */
@@ -252,6 +257,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private Paint labelPaint, metaPaint, clockPaint, buttonPaint, capsuleText, tipPaint, quotePaint, staleQuote;
     private Paint rowTitle, drawerLabel, cardTitle, cardText, cardDim, cardDimRight, bigTemp, hourPaint, hourTemp;
+    private Paint hourNow, hourNowTemp;   // the hour we're in: bold
     private Paint pricePaint, changePaint, sheetTitle, newsPaint, conditionPaint;
     private final Paint fxPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int fxFrames;
@@ -665,7 +671,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void makePaints() {
-        labelPaint = Ui.text(Ui.medium, 25 * k, 0xC7FFFFFF);
+        labelPaint = Ui.text(Ui.semibold, 25 * k, 0xC7FFFFFF);
         labelPaint.setLetterSpacing(0.1f);
         titlePaint = new TextPaint(Ui.text(Ui.displayMedium, 76 * k, 0xFFFFFFFF));
         titlePaint.setLetterSpacing(0.005f);
@@ -680,8 +686,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lTabOn = Ui.text(Ui.semibold, 30 * k, L_INK);
         lCardTitle = Ui.text(Ui.semibold, 31 * k, L_INK);
         lCardTitle.setLetterSpacing(0.012f);
-        lCardMeta = Ui.text(Ui.medium, 25 * k, L_DIM);
-        lQuote = Ui.numbers(Ui.regular, 21 * k, L_FAINT);
+        lCardMeta = Ui.text(Ui.semibold, 25 * k, L_DIM);
+        lQuote = Ui.numbers(Ui.medium, 24 * k, L_FAINT);
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
         lTip.setTextAlign(Paint.Align.CENTER);
         lDate = Ui.text(Ui.semibold, 34 * k, L_DIM);
@@ -696,32 +702,36 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         tipPaint.setTextAlign(Paint.Align.CENTER);
         tipPaint.setShadowLayer(16 * k, 0, 1 * k, 0x99000000);
         // Quotes: a subtle detail, smaller and dimmer than the rest.
-        quotePaint = Ui.numbers(Ui.regular, 21 * k, 0xB8FFFFFF);
+        quotePaint = Ui.numbers(Ui.medium, 24 * k, 0xB8FFFFFF);
         quotePaint.setShadowLayer(14 * k, 0, 1 * k, 0x99000000);
-        staleQuote = Ui.text(Ui.medium, 21 * k, 0x99FFFFFF);
+        staleQuote = Ui.text(Ui.semibold, 24 * k, 0x99FFFFFF);
         staleQuote.setTextAlign(Paint.Align.RIGHT);
         rowTitle = Ui.text(Ui.semibold, 25 * k, 0xB3FFFFFF);
-        drawerLabel = Ui.text(Ui.medium, 23 * k, 0xEBFFFFFF);
+        drawerLabel = Ui.text(Ui.semibold, 24 * k, 0xEBFFFFFF);
         drawerLabel.setTextAlign(Paint.Align.CENTER);
         cardTitle = Ui.text(Ui.semibold, 25 * k, 0xB3FFFFFF);
         cardText = Ui.text(Ui.medium, 29 * k, 0xF2FFFFFF);
-        cardDim = Ui.numbers(Ui.medium, 23 * k, 0xADFFFFFF);
-        cardDimRight = Ui.text(Ui.medium, 21 * k, 0x99FFFFFF);
+        cardDim = Ui.numbers(Ui.semibold, 24 * k, 0xADFFFFFF);
+        cardDimRight = Ui.text(Ui.semibold, 24 * k, 0x99FFFFFF);
         cardDimRight.setTextAlign(Paint.Align.RIGHT);
         bigTemp = Ui.numbers(Ui.light, 64 * k, 0xFFFFFFFF);
-        hourPaint = Ui.numbers(Ui.medium, 20 * k, 0xADFFFFFF);
+        hourPaint = Ui.numbers(Ui.semibold, 24 * k, 0xADFFFFFF);
         hourPaint.setTextAlign(Paint.Align.CENTER);
-        conditionPaint = Ui.text(Ui.medium, 22 * k, 0xF2FFFFFF);
-        hourTemp = Ui.numbers(Ui.medium, 23 * k, 0xF2FFFFFF);
+        conditionPaint = Ui.text(Ui.semibold, 24 * k, 0xF2FFFFFF);
+        hourTemp = Ui.numbers(Ui.semibold, 24 * k, 0xF2FFFFFF);
+        hourNow = Ui.numbers(Ui.bold, 24 * k, 0xFFFFFFFF);
+        hourNow.setTextAlign(Paint.Align.CENTER);
+        hourNowTemp = Ui.numbers(Ui.bold, 24 * k, 0xFFFFFFFF);
+        hourNowTemp.setTextAlign(Paint.Align.CENTER);
         hourTemp.setTextAlign(Paint.Align.CENTER);
         pricePaint = Ui.numbers(Ui.medium, 26 * k, 0xF2FFFFFF);
         pricePaint.setTextAlign(Paint.Align.RIGHT);
-        newsPaint = Ui.text(Ui.medium, 25 * k, 0xF2FFFFFF);
-        changePaint = Ui.numbers(Ui.semibold, 21 * k, 0xFFFFFFFF);
+        newsPaint = Ui.text(Ui.semibold, 25 * k, 0xF2FFFFFF);
+        changePaint = Ui.numbers(Ui.semibold, 24 * k, 0xFFFFFFFF);
         changePaint.setTextAlign(Paint.Align.CENTER);
         sheetTitle = Ui.text(Ui.displaySemibold, 40 * k, 0xFFFFFFFF);
         sheetTitle.setTextAlign(Paint.Align.CENTER);
-        gridLabel = new TextPaint(Ui.text(Ui.medium, 24 * k, 0x99FFFFFF));
+        gridLabel = new TextPaint(Ui.text(Ui.semibold, 24 * k, 0x99FFFFFF));
         gridLabel.setTextAlign(Paint.Align.CENTER);
         toastPaint = new TextPaint(Ui.text(Ui.medium, 26 * k, 0xF2FFFFFF));
         shadow.setMaskFilter(new BlurMaskFilter(SHADOW_BLUR * k, BlurMaskFilter.Blur.NORMAL));
@@ -1600,7 +1610,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         Symbols.warmWeather(getContext(), WX_ICON * k);
         Symbols.warmWeather(getContext(), 24 * k);
-        Symbols.warm(getContext(), "chevron_right", 20 * k);
+        Symbols.warm(getContext(), "chevron_down", 20 * k);
         Symbols.warm(getContext(), "sunrise", 22 * k);
         Symbols.warm(getContext(), "sunset", 22 * k);
         Symbols.warm(getContext(), "moonrise", 22 * k);
@@ -1659,6 +1669,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         bigTemp.setColor(drawerInk(1));
         hourPaint.setColor(tone(L_DIM, 0xADFFFFFF));
         hourTemp.setColor(drawerInk(0.95f));
+        hourNow.setColor(drawerInk(1));
+        hourNowTemp.setColor(drawerInk(1));
         pricePaint.setColor(drawerInk(0.95f));
         newsPaint.setColor(drawerInk(0.95f));
         conditionPaint.setColor(drawerInk(0.95f));
@@ -1727,7 +1739,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean focused = zone == Z_WEATHER;
         if (Ui.LEGACY) weatherSnapshot.draw(c, r, drawerCardsKey() + "|" + focused + "|" + wxOffset, cc -> drawWeather(cc, r));
         else drawWeather(c, r);
-        if (focused) focusRing(c, r);   // Left/Right: the next hours; Up/Down: a day
+        if (focused) focusRing(c, r);   // Up/Down: the hours; Right: the news card
     }
 
     private void drawWeather(Canvas c, RectF r) {
@@ -1751,23 +1763,39 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         fill.setShader(null);
         fill.setColor(tone(0x1A000000, 0x24FFFFFF));
         c.drawRoundRect(split - k, r.top + 34 * k, split + k, r.bottom - 34 * k, k, k, fill);
-        // The hours, from wxOffset (Left/Right and Up/Down move it while the card has the focus), between two arrows.
-        float hx = split + 44 * k, hw = (r.right - 44 * k - hx) / WX_HOURS;
-        int n = Math.min(wx.hours.size(), hourText.length), first = wxFirst(n);
+        // The hours, from the one we're in (bold, on a highlight) or from wxOffset (Up/Down move it while the card has
+        // the focus); the up and down arrows at the right say whether there are more.
+        float hx = split + 30 * k, hw = (r.right - 44 * k - hx) / WX_HOURS;
+        int n = Math.min(wx.hours.size(), hourText.length), nowAt = wxNow(wx, n), first = wxFirst(wx, n);
+        long nowMs = System.currentTimeMillis();
         for (int j = 0; j < WX_HOURS && first + j < n; j++) {
             int i = first + j;
             float hc = hx + hw * (j + 0.5f);
-            c.drawText(hourText[i], hc, r.top + 98 * k, hourPaint);
-            Symbols.draw(getContext(), c, Symbols.weather(wx.hourCode.get(i), wx.hourDay.get(i)), hc, r.top + 140 * k, 24 * k, drawerInk(0.9f));
-            c.drawText(hourTempText[i], hc, r.top + 190 * k, hourTemp);
+            long at = wx.hours.get(i);
+            boolean current = at <= nowMs && nowMs < at + 3_600_000L;
+            if (current) {   // the hour we're in: bold, on a soft highlight
+                fill.setShader(null);
+                fill.setColor(tone(0x14000000, 0x26FFFFFF));
+                tmp.set(hc - hw / 2 + 3 * k, r.top + 68 * k, hc + hw / 2 - 3 * k, r.top + 206 * k);
+                c.drawRoundRect(tmp, 16 * k, 16 * k, fill);
+            }
+            // "10 PM", "11 PM" are wider than a column at 24 px: such a label gets a little smaller, never touching the next.
+            Paint label = current ? hourNow : hourPaint;
+            float size = label.getTextSize(), wide = label.measureText(hourText[i]), room = hw - 10 * k;
+            if (wide > room) label.setTextSize(size * room / wide);
+            c.drawText(hourText[i], hc, r.top + 98 * k, label);
+            label.setTextSize(size);
+            Symbols.draw(getContext(), c, Symbols.weather(wx.hourCode.get(i), wx.hourDay.get(i)), hc, r.top + 140 * k, 24 * k, drawerInk(current ? 1 : 0.9f));
+            c.drawText(hourTempText[i], hc, r.top + 190 * k, current ? hourNowTemp : hourTemp);
         }
         boolean focused = zone == Z_WEATHER;
-        int on = focused ? tone(L_INK, 0xF2FFFFFF) : tone(L_DIM, 0xB3FFFFFF), off = tone(0x401D1D1F, 0x40FFFFFF);
-        float arrow = 20 * k, mid = r.top + 140 * k;
-        Symbols.draw(getContext(), c, "chevron_right", r.right - 22 * k, mid, arrow, first + WX_HOURS < n ? on : off);
+        int on = focused ? tone(L_INK, 0xF2FFFFFF) : tone(L_DIM, 0xB3FFFFFF), off = END_RED;
+        // Up and Down move through the hours: an arrow is brighter where there are more.
+        float arrow = 20 * k, ax = r.right - 22 * k, mid = r.top + 140 * k;
+        Symbols.draw(getContext(), c, "chevron_down", ax, mid + 14 * k, arrow, first + WX_HOURS < n ? on : off);
         c.save();
-        c.scale(-1, 1, split + 22 * k, mid);
-        Symbols.draw(getContext(), c, "chevron_right", split + 22 * k, mid, arrow, first > 0 ? on : off);
+        c.scale(1, -1, ax, mid - 14 * k);
+        Symbols.draw(getContext(), c, "chevron_down", ax, mid - 14 * k, arrow, first > nowAt ? on : off);
         c.restore();
         // Above the hours: the day they are on (today's date at first), and the download speed at the right.
         int day = n == 0 ? -1 : dayOf(wx, wx.hours.get(first));
@@ -1789,9 +1817,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    /** The first hour shown: wxOffset while the card has the focus, else the next hour. */
-    private int wxFirst(int n) {
-        return zone == Z_WEATHER ? Math.max(0, Math.min(wxOffset, Math.max(0, n - WX_HOURS))) : 0;
+    /**
+     * The first hour shown: the hour we're in, or later ones while the card has the focus (wxOffset). The forecast is
+     * fetched every 30 minutes: an hour that has gone by since is left out.
+     */
+    private int wxFirst(HomeData.Weather wx, int n) {
+        int now = wxNow(wx, n);
+        return zone == Z_WEATHER ? Math.max(now, Math.min(wxOffset, Math.max(now, n - WX_HOURS))) : now;
+    }
+
+    /** Index of the hour we're in (the first hour not over yet). */
+    private static int wxNow(HomeData.Weather wx, int n) {
+        long now = System.currentTimeMillis();
+        int i = 0;
+        while (i < n - 1 && wx.hours.get(i) + 3_600_000L <= now) i++;
+        return i;
     }
 
     /** Which forecast day (index in wx.days) holds `at`; 0 without days. */
@@ -2034,26 +2074,26 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean focused = zone == Z_NEWS;
         if (Ui.LEGACY) newsSnapshot.draw(c, r, drawerCardsKey() + "|" + newsTop + "|" + newsSel + "|" + focused, cc -> drawNews(cc, r));
         else drawNews(c, r);
-        if (focused) focusRing(c, r);   // Left/Right turn the page, Up/Down move, OK opens
+        if (focused) focusRing(c, r);   // Up/Down: the headlines; Left: the weather card; OK opens
     }
 
     private void drawNews(Canvas c, RectF r) {
         float x = r.left + 34 * k, right = r.right - 34 * k;
         refreshNewsText(right - x - 22 * k);
         c.drawText(Ui.tr("News"), x, r.top + 54 * k, cardTitle);
-        // < 2 of 10 >: an arrow is brighter where there is a page to go to.
+        // 2 of 10, then Up and Down: an arrow is brighter where there are more headlines.
         boolean focused = zone == Z_NEWS;
-        float size = 20 * k, aw = Symbols.width(getContext(), "chevron_right", size), mid = r.top + 54 * k - Ui.halfCap(cardDimRight);
-        int on = focused ? tone(L_INK, 0xF2FFFFFF) : tone(L_DIM, 0xB3FFFFFF), off = tone(0x401D1D1F, 0x40FFFFFF);
-        int last = Math.max(0, data.news.size() - NEWS_ROWS);
-        Symbols.draw(getContext(), c, "chevron_right", right - aw / 2, mid, size, newsTop < last ? on : off);
-        float labelRight = right - aw - 10 * k;
-        c.drawText(newsRight, labelRight, r.top + 54 * k, cardDimRight);
-        float lx = labelRight - cardDimRight.measureText(newsRight) - 10 * k - aw / 2;
+        float size = 20 * k, aw = Symbols.width(getContext(), "chevron_down", size), mid = r.top + 54 * k - Ui.halfCap(cardDimRight);
+        int on = focused ? tone(L_INK, 0xF2FFFFFF) : tone(L_DIM, 0xB3FFFFFF), off = END_RED;
+        int n = data.news.size();
+        boolean more = focused ? newsSel < n - 1 : newsTop + NEWS_ROWS < n, before = focused ? newsSel > 0 : newsTop > 0;
+        Symbols.draw(getContext(), c, "chevron_down", right - aw / 2, mid, size, more ? on : off);
+        float ux = right - aw - 8 * k - aw / 2;
         c.save();
-        c.scale(-1, 1, lx, mid);
-        Symbols.draw(getContext(), c, "chevron_right", lx, mid, size, newsTop > 0 ? on : off);
+        c.scale(1, -1, ux, mid);
+        Symbols.draw(getContext(), c, "chevron_down", ux, mid, size, before ? on : off);
         c.restore();
+        c.drawText(newsRight, ux - aw / 2 - 12 * k, r.top + 54 * k, cardDimRight);
         float line = 31 * k, dot = 4 * k;
         for (int i = 0; i < NEWS_ROWS; i++) {
             String first = newsLines[i * 2];
@@ -2566,13 +2606,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 int n = data.news.size(), last = Math.max(0, n - NEWS_ROWS);
                 if (n == 0) {
                     zone = Z_DRAWER;
-                } else if (dx < 0 && newsTop == 0 && weatherOn()) {
-                    zone = Z_WEATHER;   // past the first page: the weather card, at its first hours
-                    wxOffset = 0;
-                } else if (dx != 0) {   // a page: three headlines
-                    int top = Math.max(0, Math.min(last, newsTop + dx * NEWS_ROWS));
-                    if (top == newsTop) return;
-                    newsTop = newsSel = top;
+                } else if (dx < 0) {    // Left: the weather card, in one press
+                    if (!weatherOn()) return;
+                    zone = Z_WEATHER;
+                } else if (dx > 0) {
+                    return;             // the last card
                 } else if (dy > 0) {    // the next headline, scrolling one at a time past the last row (newsAhead, after move)
                     if (newsSel >= n - 1) return;
                     newsSel++;
@@ -2587,23 +2625,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             }
             case Z_WEATHER: {
-                int n = data.weather.hours.size(), last = Math.max(0, n - WX_HOURS);
-                if (dx > 0 && wxOffset >= last) {
+                HomeData.Weather wx = data.weather;
+                int n = Math.min(wx.hours.size(), hourText.length), now = wxNow(wx, n), last = Math.max(now, n - WX_HOURS);
+                wxOffset = Math.max(now, Math.min(wxOffset, last));
+                if (dx > 0) {           // Right: the news card, in one press
                     if (!newsOn()) return;
-                    zone = Z_NEWS;      // past the last hours: the news card
+                    zone = Z_NEWS;
                     newsSel = newsTop;
-                } else if (dx != 0) {   // the next (or previous) WX_HOURS hours
-                    int next = Math.max(0, Math.min(last, wxOffset + dx * WX_HOURS));
+                } else if (dx < 0) {
+                    return;             // the first card
+                } else if (dy > 0) {    // the next WX_HOURS hours (held, it runs through the week)
+                    int next = Math.min(last, wxOffset + WX_HOURS);
                     if (next == wxOffset) return;
                     wxOffset = next;
-                } else if (dy > 0) {    // a day later
-                    int next = Math.min(last, wxOffset + 24);
-                    if (next == wxOffset) return;
-                    wxOffset = next;
-                } else if (wxOffset == 0) {
+                } else if (wxOffset == now) {
                     zone = Z_DRAWER;
-                } else {                // a day earlier
-                    wxOffset = Math.max(0, wxOffset - 24);
+                } else {                // the hours before (back to the hour we're in)
+                    wxOffset = Math.max(now, wxOffset - WX_HOURS);
                 }
                 drawerDirty = true;
                 break;

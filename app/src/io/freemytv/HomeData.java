@@ -142,7 +142,7 @@ final class HomeData {
         int code = -1;
         boolean isDay = true;
         long sunrise, sunset;   // today's, in epoch ms
-        // Next hours (starting at the next full hour): time, temperature, code and day/night.
+        // The hours from the one we're in to the end of the forecast (a week): time, temperature, code and day/night.
         final List<Long> hours = new ArrayList<>();
         final List<Double> hourTemp = new ArrayList<>();
         final List<Integer> hourCode = new ArrayList<>();
@@ -325,7 +325,7 @@ final class HomeData {
             long now = System.currentTimeMillis();
             for (int i = 0; i < times.length(); i++) {   // every hour from now to the end of the forecast
                 long hour = localTime(times.getString(i), at);
-                if (hour <= now) continue;
+                if (hour + 3_600_000L <= now) continue;   // from the hour we're in (shown as the current one)
                 w.hours.add(hour);
                 w.hourTemp.add(temps.getDouble(i));
                 w.hourCode.add(codes.getInt(i));
