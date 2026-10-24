@@ -24,6 +24,7 @@ A fork of [simbasjungles/free-my-tv](https://github.com/simbasjungles/free-my-tv
 - **A weather card** with the date, live download speed, sunrise/sunset and moonrise/moonset, a small animated icon, and a 7-day hourly forecast you scroll with the remote. The current hour is in bold.
 - **Easy remote navigation:** Left/Right switch between the weather and news cards in one press, Up/Down scroll inside them, and the arrows turn red at either end.
 - **Text tuned for a TV:** small text is at least 24 px and a weight heavier, so it reads well from the sofa.
+- **Cleaner Home Settings:** with `show_crypto=false`, the crypto rows (Quotes widget, Bitcoin, Ethereum, Solana) are hidden. A new last row, *Measure Home button*, shows how fast the Home button opens Free My TV and measures it again when you press OK (the screen flips to Home and back three times); the *Comparison* on Free My TV's main screen updates with it.
 - **A home screen that starts about twice as fast**, with app banners saved and slow lookups moved to the background.
 
 ## What you get
@@ -133,7 +134,10 @@ The first values come from `config.properties`, created by the first build (Goog
 | `city` | The name on the weather card | `Weather` |
 | `hide_animation` | Leave cartoons and anime out of the picks | `false` |
 | `language` | `auto` (follows the TV), or a language with a [translation](#translations) (`en`, `pt`, `es`, `de`, `ru`, `fr`, `ja`…) | `auto` |
-| `show_crypto` | Show Binance crypto prices on home and screensaver | `true` |
+| `show_crypto` | Show Binance crypto prices on home and screensaver; `false` also hides the crypto rows in *Home Settings* | `true` |
+| `show_news` | A news card next to the weather (in place of the crypto prices) | `false` |
+| `news_feed` | The news card's RSS feed; Google News for your country is `https://news.google.com/rss?hl=<language>-<COUNTRY>&gl=<COUNTRY>&ceid=<COUNTRY>:<language>` | `https://news.google.com/rss` |
+| `shelf_hide` | Apps to leave off the home shelf (they stay in All Apps), by package, comma separated; also applies to a shelf arranged in *Home Settings* → *Shelf*. Google TV only | empty |
 | `currency` | Crypto prices in `USD`, `EUR`, `BRL`… | `USD` |
 | `temperature` | `C`, `F` or `auto` | `auto` |
 | `disable_assistant` | Also turn off Google Assistant | `false` |
