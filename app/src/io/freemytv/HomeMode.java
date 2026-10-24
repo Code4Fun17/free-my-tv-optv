@@ -86,6 +86,19 @@ final class HomeMode {
         "com.mediatek.tv.retaildemo", "com.electronic.manual",                        // store demo, manual
     };
 
+    /**
+     * DEBLOAT, plus the packages in config.properties "debloat_extra": apps this TV starts at boot that its owner
+     * doesn't use. They go through the same checks (PROTECTED, mayTurnOff) and come back with Original like the rest.
+     */
+    static List<String> debloat() {
+        List<String> out = new ArrayList<>(Arrays.asList(DEBLOAT));
+        for (String pkg : Config.DEBLOAT_EXTRA.split(",")) {
+            String p = pkg.trim();
+            if (!p.isEmpty() && !out.contains(p)) out.add(p);
+        }
+        return out;
+    }
+
     /** The voice assistant, only with disable_assistant=true in config.properties (the mic button stops working). */
     static final String[] ASSISTANT = {"com.google.android.katniss", "com.android.hotwordenrollment.okgoogle"};
 
@@ -435,7 +448,7 @@ final class HomeMode {
             String home = originalHome(s);
             Set<String> toEnable = new HashSet<>(stringList(s, "disabled"));
             for (String pkg : targets(home, originalDream(s), true)) {
-                if (!Arrays.asList(DEBLOAT).contains(pkg) && !Arrays.asList(ASSISTANT).contains(pkg)) toEnable.add(pkg);
+                if (!debloat().contains(pkg) && !Arrays.asList(ASSISTANT).contains(pkg)) toEnable.add(pkg);
             }
             toEnable.removeAll(stringList(s, "keptOff"));
             Set<String> present = packages(adb, "");
@@ -701,7 +714,7 @@ final class HomeMode {
         if (TV_LAUNCHER.equals(homePkg)) out.add(TV_RECOMMENDATIONS);
         String dreamPkg = packageOf(dream);
         if (dreamPkg != null && !dreamPkg.equals(PKG) && !dreamPkg.equals(homePkg)) out.add(dreamPkg);
-        out.addAll(Arrays.asList(DEBLOAT));
+        out.addAll(debloat());
         if (Config.DISABLE_ASSISTANT) out.addAll(Arrays.asList(ASSISTANT));
         return out;
     }

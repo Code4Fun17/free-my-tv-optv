@@ -30,6 +30,7 @@ This fork of [simbasjungles/free-my-tv](https://github.com/simbasjungles/free-my
 - **A home screen that starts about twice as fast**, with app banners saved and slow lookups moved to the background.
 - **Easier-to-read Android panels:** when Android's see-through Settings panels (or the inputs and volume panels) open over the home screen, it darkens behind them so they read as on a solid background.
 - **A new icon** that says what the app does: a screen full of app tiles, cleared down to the one you want.
+- **A faster boot, measured:** `debloat_extra` turns off more apps your TV starts at every boot (the same safe way, and *Original* brings them back), and [HELP.md](HELP.md) shows how to restart the TV with adb, measure what starts and when, choose, and measure again, with a prompt that lets an AI assistant do it on any TV.
 
 ## What you get
 
@@ -141,6 +142,7 @@ The first values come from `config.properties`, created by the first build (Goog
 | `show_crypto` | Show Binance crypto prices on home and screensaver; `false` also hides the crypto rows in *Home Settings* | `true` |
 | `show_news` | A news card next to the weather (in place of the crypto prices) | `false` |
 | `news_feed` | The news card's RSS feed; Google News for your country is `https://news.google.com/rss?hl=<language>-<COUNTRY>&gl=<COUNTRY>&ceid=<COUNTRY>:<language>` | `https://news.google.com/rss` |
+| `debloat_extra` | More apps for Free My TV mode to turn off (never uninstall), by package, comma separated: ones your TV starts at every boot that you don't use. The same safety checks apply, and *Original* turns them back on. How to find them: [HELP.md](HELP.md). Google TV only | empty |
 | `shelf_hide` | Apps to leave off the home shelf (they stay in All Apps), by package, comma separated; also applies to a shelf arranged in *Home Settings* → *Shelf*. Google TV only | empty |
 | `currency` | Crypto prices in `USD`, `EUR`, `BRL`… | `USD` |
 | `temperature` | `C`, `F` or `auto` | `auto` |
