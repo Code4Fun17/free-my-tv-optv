@@ -26,6 +26,8 @@ A fork of [simbasjungles/free-my-tv](https://github.com/simbasjungles/free-my-tv
 - **Text tuned for a TV:** small text is at least 24 px and a weight heavier, so it reads well from the sofa.
 - **Cleaner Home Settings:** with `show_crypto=false`, the crypto rows (Quotes widget, Bitcoin, Ethereum, Solana) are hidden. A new last row, *Measure Home button*, shows how fast the Home button opens Free My TV and measures it again when you press OK (the screen flips to Home and back three times); the *Comparison* on Free My TV's main screen updates with it.
 - **A home screen that starts about twice as fast**, with app banners saved and slow lookups moved to the background.
+- **Easier-to-read Android panels:** when Android's see-through Settings panels (or the inputs and volume panels) open over the home screen, it darkens behind them so they read as on a solid background.
+- **A new icon** that says what the app does: a screen full of app tiles, cleared down to the one you want.
 
 ## What you get
 

@@ -518,6 +518,30 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         spoken.readAgain();
     }
 
+    /** Drawn over everything while another app's panel covers the home screen (see covered). */
+    private final android.graphics.drawable.ColorDrawable cover = new android.graphics.drawable.ColorDrawable(0xFF07080C);
+    private android.animation.ValueAnimator coverFade;
+
+    /**
+     * Another app's panel over the home screen (Android's Settings, the inputs, the volume): the home screen fades
+     * almost to black behind it, so the panel (see-through, drawn by Android) is easy to read. Back: bright at once.
+     */
+    void covered(boolean on) {
+        if (getForeground() != cover) {
+            cover.setAlpha(0);
+            setForeground(cover);
+        }
+        if (coverFade != null) coverFade.cancel();
+        if (!on) {
+            cover.setAlpha(0);
+            return;
+        }
+        coverFade = android.animation.ValueAnimator.ofInt(cover.getAlpha(), 235);
+        coverFade.setDuration(180);
+        coverFade.addUpdateListener(v -> cover.setAlpha((int) v.getAnimatedValue()));
+        coverFade.start();
+    }
+
     void pause() {
         if (!running) return;
         running = false;

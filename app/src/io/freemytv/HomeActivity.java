@@ -47,11 +47,23 @@ public class HomeActivity extends Activity {
             recreate();   // a new language or city: draw everything again
             return;
         }
-        if (home != null) home.resume();
+        if (home != null) {
+            home.covered(false);
+            home.resume();
+        }
+    }
+
+    /** Back from another app: the home screen is drawn bright again before it shows. */
+    @Override protected void onStart() {
+        super.onStart();
+        if (home != null) home.covered(false);
     }
 
     @Override protected void onPause() {
-        if (home != null) home.pause();
+        if (home != null) {
+            home.pause();
+            home.covered(true);   // a panel over it (Android's Settings, the inputs…) reads on a dark, solid background
+        }
         super.onPause();
     }
 
