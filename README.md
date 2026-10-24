@@ -15,6 +15,15 @@ Open source. Built with Claude Code. One button to undo.
 
 </div>
 
+## In this fork
+
+A fork of [simbasjungles/free-my-tv](https://github.com/simbasjungles/free-my-tv), an ad-free Google TV / Android TV home screen, with extra features and speed tweaks.
+
+- **Every installed app on the home shelf**, with a config option (`shelf_hide`) to hide the ones you don't use.
+- **A news card from any RSS feed** (`show_news`, `news_feed`). Stories open in a fast TV reader view with ads and trackers blocked and cookie pop-ups rejected, and no news is stored on the TV.
+- **A weather card** with the date, live download speed, sunrise/sunset and moonrise/moonset, a small animated icon, and a 7-day hourly forecast you scroll with the remote.
+- **A home screen that starts about twice as fast**, with app banners saved and slow lookups moved to the background.
+
 ## What you get
 
 - **No ads.** No sponsored rows, banners or autoplaying promos. Not one.
