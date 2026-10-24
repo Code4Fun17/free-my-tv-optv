@@ -17,7 +17,9 @@ Open source. Built with Claude Code. One button to undo.
 
 ## In this fork
 
-A fork of [simbasjungles/free-my-tv](https://github.com/simbasjungles/free-my-tv), an ad-free Google TV / Android TV home screen, with extra features and speed tweaks.
+**Free My TV was created by Simba ([@simbasjungles](https://github.com/simbasjungles)).** The app itself, its design and glass home screen, the safe switch to and from the TV's own home screen with its safety net, the LG and Samsung versions, the website, and the guide this README follows are their work, together with the [project's contributors](https://github.com/simbasjungles/free-my-tv/graphs/contributors). This fork stands on that base under its MIT license: thank you for making it, and for making it open.
+
+This fork of [simbasjungles/free-my-tv](https://github.com/simbasjungles/free-my-tv) adds a few extra features and speed tweaks:
 
 - **Every installed app on the home shelf**, with a config option (`shelf_hide`) to hide the ones you don't use.
 - **A news card from any RSS feed** (`show_news`, `news_feed`). Stories open in a fast TV reader view with ads and trackers blocked and cookie pop-ups rejected, and no news is stored on the TV.
@@ -271,6 +273,7 @@ No accounts, no analytics, no tracking. The app talks to TMDB, Open-Meteo (with 
 
 ## Credits
 
+- Free My TV was created by **Simba ([@simbasjungles](https://github.com/simbasjungles))**, with the [contributors](https://github.com/simbasjungles/free-my-tv/graphs/contributors) of [simbasjungles/free-my-tv](https://github.com/simbasjungles/free-my-tv). This fork's additions are listed in [In this fork](#in-this-fork).
 - Built with [Claude Code](https://claude.com/claude-code).
 - The LG version builds on what [@danielthejoker18](https://github.com/danielthejoker18) found in [FreeMyTvWebOS](https://github.com/danielthejoker18/FreeMyTvWebOS) (MIT): installing through Developer Mode and opening apps through the TV's service bus.
 - On Samsung TVs it installs with [TizenBrew Installer](https://github.com/reisxd/TizenBrewInstaller) by [@reisxd](https://github.com/reisxd).
