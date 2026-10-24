@@ -223,6 +223,23 @@ final class HomeMode {
         ModeJob.schedule(c, ModeJob.VERIFY, null, 45_000);
     }
 
+    /** Settings > Home Settings > Measure Home button: the Comparison's Free My TV figure, measured again now. */
+    static void requestHomeTime(Context c) {
+        ModeJob.schedule(c, ModeJob.HOME_TIME, FREE, 0);
+    }
+
+    /** The job of requestHomeTime: flips to Settings and back three times (~5 s), and ends in Settings. */
+    static void measureHomeTimeNow(Context app) {
+        synchronized (RUN) {
+            if (!FREE.equals(state(app).optString("mode"))) return;
+            try (Adb adb = Adb.connect(app, 10_000, null)) {
+                measureHomeTime(app, adb, FREE);
+            } catch (IOException | JSONException e) {
+                AppLog.w("home time: " + e.getMessage());
+            }
+        }
+    }
+
     /** After an update of this app: complete Free My TV mode if anything is missing. */
     static void verify(Context c) {
         ModeJob.schedule(c, ModeJob.VERIFY, null, 0);

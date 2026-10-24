@@ -248,7 +248,11 @@ final class HomeData {
                 }
             });
         }
-        if (Config.SHOW_NEWS && !fetchingNews && (now - newsAt > NEWS_EVERY || now < newsAt) && !failedRecently(newsFailedAt, now)) {
+        // No headlines at all yet (kept in memory only: a home screen the system restarted starts without them): a failed
+        // fetch is tried again after 20 s, not 2 min.
+        boolean newsWait = news.isEmpty() ? newsFailedAt != 0 && now >= newsFailedAt && now - newsFailedAt < 20_000L
+                : failedRecently(newsFailedAt, now);
+        if (Config.SHOW_NEWS && !fetchingNews && (now - newsAt > NEWS_EVERY || now < newsAt) && !newsWait) {
             fetchingNews = true;
             io.execute(() -> {
                 try {
@@ -257,15 +261,22 @@ final class HomeData {
                     if (list.isEmpty()) throw new IOException("no headlines");
                     news = list;
                     newsAt = System.currentTimeMillis();
+                    newsFailedAt = 0;   // (logged only when it fails, below)
                     notifyListeners();
                 } catch (Exception e) {
                     newsFailedAt = System.currentTimeMillis();
                     AppLog.w("news: " + e.getMessage());
+                    notifyListeners();   // the card says it couldn't get them
                 } finally {
                     fetchingNews = false;
                 }
             });
         }
+    }
+
+    /** The last news fetch failed (the card says so while it has no headlines). */
+    boolean newsFailing() {
+        return newsFailedAt != 0;
     }
 
     private static boolean failedRecently(long at, long now) {

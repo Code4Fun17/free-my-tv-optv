@@ -660,7 +660,10 @@ public class SettingsActivity extends Activity {
         // MARK: - Home Settings and Remote Buttons
 
         private static final String[] UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"};
-        /** Home Settings: language, temperature, theme, my photos, sounds, weather, city, quotes, then one row per coin. */
+        /**
+         * Home Settings: language, temperature, theme, my photos, sounds, weather, city, then (only with show_crypto in
+         * config.properties) quotes and one row per coin, and last, Measure Home button (the Comparison's figure).
+         */
         private static final int PHOTOS_ROW = 3, CITY_ROW = 6, COIN_ROWS = 8;
         /** Home Settings rows on screen at once (what fits above the hints at 1080p); a longer list scrolls. */
         private static final int SETTINGS_VISIBLE = 10;
@@ -678,12 +681,35 @@ public class SettingsActivity extends Activity {
             l.add(Ui.tr("Navigation sounds"));
             l.add(Ui.tr("Weather widget"));
             l.add(Ui.tr("City"));
-            l.add(Ui.tr("Quotes widget"));
-            l.add("Bitcoin");
-            l.add("Ethereum");
-            l.add("Solana");
-            if (dollar()) l.add(Ui.tr("Dollar"));
+            if (Config.SHOW_CRYPTO) {   // no prices on this TV: no rows for them
+                l.add(Ui.tr("Quotes widget"));
+                l.add("Bitcoin");
+                l.add("Ethereum");
+                l.add("Solana");
+                if (dollar()) l.add(Ui.tr("Dollar"));
+            }
+            l.add(Ui.tr("Measure Home button"));
             return l.toArray(new String[0]);
+        }
+
+        /** The last row: OK measures the Home button again (HomeMode.requestHomeTime). */
+        private int measureRow() {
+            return settingLabels().length - 1;
+        }
+
+        private long measureAsked;   // when OK asked for a measurement ("Measuring…" for the few seconds it takes)
+
+        private String measureValue() {
+            if (System.currentTimeMillis() - measureAsked < 12_000) return Ui.tr("Measuring…");
+            if (!freeActive()) return "—";
+            JSONObject metrics = state.optJSONObject("metrics");
+            return metric(metrics == null ? null : metrics.optJSONObject(HomeMode.FREE), "homeMs");
+        }
+
+        private void measureHome() {
+            if (!freeActive() || busy() || System.currentTimeMillis() - measureAsked < 12_000) return;
+            measureAsked = System.currentTimeMillis();
+            HomeMode.requestHomeTime(getContext());
         }
 
         private String[] settingValues() {
@@ -701,9 +727,11 @@ public class SettingsActivity extends Activity {
             v[4] = onOff(Prefs.sounds());
             v[5] = onOff(Prefs.weather());
             v[CITY_ROW] = !cityStatus.isEmpty() ? cityStatus : Prefs.city().isEmpty() ? "—" : Prefs.city();
+            v[v.length - 1] = measureValue();
+            if (!Config.SHOW_CRYPTO) return v;
             v[7] = onOff(Prefs.quotes());
             // No quotes widget, nowhere to show prices: the coins read as off (and stay locked) until it is back on.
-            for (int i = COIN_ROWS; i < v.length; i++) v[i] = onOff(Prefs.quotes() && Prefs.coin(i - COIN_ROWS));
+            for (int i = COIN_ROWS; i < v.length - 1; i++) v[i] = onOff(Prefs.quotes() && Prefs.coin(i - COIN_ROWS));
             return v;
         }
 
@@ -775,6 +803,7 @@ public class SettingsActivity extends Activity {
                 return;
             }
             int row = pickScroll + focus;
+            if (row == measureRow()) return;   // OK measures (measureHome); the arrows change nothing here
             switch (row) {
                 case 0: break;   // OK opens the language picker.
                 case 1: {
@@ -1039,7 +1068,7 @@ public class SettingsActivity extends Activity {
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
-                boolean locked = !keys && from + i >= COIN_ROWS && !Prefs.quotes();
+                boolean locked = !keys && from + i >= COIN_ROWS && from + i != measureRow() && !Prefs.quotes();
                 rowValue.setColor(blend(locked ? 0x59FFFFFF : 0xB3FFFFFF, locked ? 0x591C1C1E : 0xB31C1C1E, f));
                 if (locked) rowLabel.setColor(blend(0x73FFFFFF, 0x731C1C1E, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -1053,6 +1082,7 @@ public class SettingsActivity extends Activity {
             c.drawText(where + (!keys && from + focus == PHOTOS_ROW ? (Photos.files(getContext()).isEmpty()
                     ? Ui.tr("Send them from a computer: see “Your own photos” in the README.")
                     : Ui.tr("OK removes them; the arrows turn them on or off."))
+                    : !keys && from + focus == measureRow() ? Ui.tr("OK measures it again: the screen flips to Home and back three times.")
                     : Ui.tr("OK or the arrows change the value.")), LIST_X * k + 30 * k, hy, hint);
             if (keys) {
                 c.drawText(RemoteKeys.VESTEL ? Ui.tr("YouTube, Prime Video and Google Play: the TV itself controls those buttons.")
@@ -1106,6 +1136,10 @@ public class SettingsActivity extends Activity {
                 return;
             } else if (screen == HOME_SETTINGS && pickScroll + focus == PHOTOS_ROW) {
                 askRemovePhotos();
+                return;
+            } else if (screen == HOME_SETTINGS && pickScroll + focus == measureRow()) {
+                measureHome();
+                invalidate();
                 return;
             } else if (screen == HOME_SETTINGS) {
                 adjust(1);

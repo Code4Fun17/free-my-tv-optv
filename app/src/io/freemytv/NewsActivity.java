@@ -304,7 +304,8 @@ public final class NewsActivity extends Activity {
         if (shown) return;
         shown = true;
         main.removeCallbacksAndMessages(null);
-        AppLog.w("news: " + (reader ? "story" : "page as it is") + " shown in " + (SystemClock.elapsedRealtime() - t0) + " ms"
+        // Logged only when the story couldn't be read (the page shown as it is); a story read fine leaves no trace.
+        if (!reader) AppLog.w("news: page as it is shown in " + (SystemClock.elapsedRealtime() - t0) + " ms"
                 + (article == null ? "" : " (" + Uri.parse(article).getHost() + ")"));
         web.setVisibility(View.VISIBLE);
         loading.setVisibility(View.GONE);

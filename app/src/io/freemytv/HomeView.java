@@ -1690,8 +1690,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return Prefs.weather() && !data.weather.hours.isEmpty();
     }
 
-    /** The card next to the weather: the news (config.properties "show_news"), or else the crypto prices. */
+    /**
+     * The card next to the weather: the news (config.properties "show_news"), or else the crypto prices. The news card
+     * keeps its place while its headlines load (they are kept in memory only); it takes the focus once they're there.
+     */
     private boolean newsOn() {
+        return Config.SHOW_NEWS;
+    }
+
+    private boolean newsReady() {
         return Config.SHOW_NEWS && !data.news.isEmpty();
     }
 
@@ -2072,15 +2079,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawNewsCard(Canvas c, RectF r) {
         drawerCard(c, r);
         boolean focused = zone == Z_NEWS;
-        if (Ui.LEGACY) newsSnapshot.draw(c, r, drawerCardsKey() + "|" + newsTop + "|" + newsSel + "|" + focused, cc -> drawNews(cc, r));
+        if (Ui.LEGACY) newsSnapshot.draw(c, r, drawerCardsKey() + "|" + newsTop + "|" + newsSel + "|" + focused + "|"
+                + data.news.size() + "|" + data.newsFailing(), cc -> drawNews(cc, r));
         else drawNews(c, r);
         if (focused) focusRing(c, r);   // Up/Down: the headlines; Left: the weather card; OK opens
     }
 
     private void drawNews(Canvas c, RectF r) {
         float x = r.left + 34 * k, right = r.right - 34 * k;
-        refreshNewsText(right - x - 22 * k);
         c.drawText(Ui.tr("News"), x, r.top + 54 * k, cardTitle);
+        if (data.news.isEmpty()) {   // the headlines are on their way (or the last try failed: another comes soon)
+            c.drawText(data.newsFailing() ? Ui.tr("No news right now. Trying again…") : Ui.tr("Loading the news…"),
+                    x, r.top + 120 * k, cardDim);
+            return;
+        }
+        refreshNewsText(right - x - 22 * k);
         // 2 of 10, then Up and Down: an arrow is brighter where there are more headlines.
         boolean focused = zone == Z_NEWS;
         float size = 20 * k, aw = Symbols.width(getContext(), "chevron_down", size), mid = r.top + 54 * k - Ui.halfCap(cardDimRight);
@@ -2629,7 +2642,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 int n = Math.min(wx.hours.size(), hourText.length), now = wxNow(wx, n), last = Math.max(now, n - WX_HOURS);
                 wxOffset = Math.max(now, Math.min(wxOffset, last));
                 if (dx > 0) {           // Right: the news card, in one press
-                    if (!newsOn()) return;
+                    if (!newsReady()) return;
                     zone = Z_NEWS;
                     newsSel = newsTop;
                 } else if (dx < 0) {
@@ -2665,10 +2678,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     drawerIndex = next;
                 } else if (dy < 0) {
                     closeDrawer();
-                } else if (!talkBack() && (newsOn() || weatherOn())) {
+                } else if (!talkBack() && (newsReady() || weatherOn())) {
                     // The card under the focused button: the weather on the left, the news on the right.
                     boolean right = drawerRects[drawerIndex].centerX() > weatherCard.right;
-                    if (newsOn() && (right || !weatherOn())) {
+                    if (newsReady() && (right || !weatherOn())) {
                         zone = Z_NEWS;   // its page is the one showing
                         newsSel = newsTop;
                     } else {
