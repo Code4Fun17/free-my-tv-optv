@@ -159,32 +159,63 @@ final class HomeApps {
         List<Item> items = new ArrayList<>();
         PackageManager pm = c.getPackageManager();
         int max = maxShelf(c);
+        StringBuilder last = new StringBuilder();
         for (String pkg : shelfPackages(c)) {
             if (items.size() >= max) break;
             Intent launch = launchIntent(pm, pkg);
             if (launch == null) continue;
-            ResolveInfo ri = pm.resolveActivity(launch, 0);
-            String[] d = known(pkg);
-            Item it = new Item();
-            it.kind = APP;
-            it.pkg = pkg;
-            if (d == null) {
-                // An app picked in Settings > Shelf that isn't in SHELF: its own name and TV art.
-                it.key = pkg;
-                it.label = ri != null ? String.valueOf(ri.loadLabel(pm)) : pkg;
-                it.setTile(appTile(c, null, pkg, 0));
-            } else {
-                it.key = d[0];
-                it.label = d[1];
-                it.logo = shelfLogo(c, d[0], d[2], d[4], extract);
-                if (it.logo == null) it.setTile(appTile(c, d[0], d[2], 0xFF000000 | Integer.parseInt(d[3], 16)));
-                if (it.logo != null) it.logoInk = ink(it.logo);
-                it.logoDark = ownLogoCached(c, d[0] + "-dark");
-                it.logoScale = Float.parseFloat(d[5]);
+            String label = null;
+            if (known(pkg) == null) {
+                ResolveInfo ri = pm.resolveActivity(launch, 0);
+                label = ri != null ? String.valueOf(ri.loadLabel(pm)).replace('\t', ' ').replace('\n', ' ') : pkg;
             }
-            items.add(it);
+            items.add(shelfItem(c, pkg, label, extract));
+            last.append(pkg).append('\t').append(label == null ? "" : label).append('\n');
+        }
+        c.getSharedPreferences(SHELF_LAST, Context.MODE_PRIVATE).edit().putString("apps", last.toString()).apply();
+        return items;
+    }
+
+    private static final String SHELF_LAST = "shelf-last";
+
+    /**
+     * The shelf as it was last read: no package queries and no app names to load (~0.7 s on a TV), for a cold start.
+     * The first time, the real read.
+     */
+    static List<Item> shelfLast(Context c) {
+        String saved = c.getSharedPreferences(SHELF_LAST, Context.MODE_PRIVATE).getString("apps", null);
+        if (saved == null) return shelf(c, false);
+        List<Item> items = new ArrayList<>();
+        for (String line : saved.split("\n")) {
+            int tab = line.indexOf('\t');
+            if (tab <= 0) continue;
+            String label = line.substring(tab + 1);
+            items.add(shelfItem(c, line.substring(0, tab), label.isEmpty() ? null : label, false));
         }
         return items;
+    }
+
+    /** A shelf app: one from SHELF with its lifted logo, any other with `label` and its TV art. */
+    private static Item shelfItem(Context c, String pkg, String label, boolean extract) {
+        String[] d = known(pkg);
+        Item it = new Item();
+        it.kind = APP;
+        it.pkg = pkg;
+        if (d == null) {
+            // An app that isn't in SHELF (every TV app is on the shelf by default): its own name and TV art.
+            it.key = pkg;
+            it.label = label != null ? label : pkg;
+            it.setTile(appTile(c, null, pkg, 0));
+        } else {
+            it.key = d[0];
+            it.label = d[1];
+            it.logo = shelfLogo(c, d[0], d[2], d[4], extract);
+            if (it.logo == null) it.setTile(appTile(c, d[0], d[2], 0xFF000000 | Integer.parseInt(d[3], 16)));
+            if (it.logo != null) it.logoInk = ink(it.logo);
+            it.logoDark = ownLogoCached(c, d[0] + "-dark");
+            it.logoScale = Float.parseFloat(d[5]);
+        }
+        return it;
     }
 
     private static String[] known(String pkg) {
@@ -939,11 +970,55 @@ final class HomeApps {
         String cacheKey = key != null ? key : pkg;
         if (TILES.containsKey(cacheKey)) return TILES.get(cacheKey);
         Bitmap logo = key == null ? null : ownLogo(c, key);
-        Bitmap tile = logo != null ? logoTile(logo, brand) : bannerTile(c, pkg);
-        if (tile == null) tile = iconTile(c, pkg);
+        Bitmap tile = logo != null ? logoTile(logo, brand) : null;
+        if (tile == null) {
+            // The app's own TV art, drawn from its package (~60 ms an app), or read from the copy drawn before.
+            File file = tileFile(c, pkg);
+            tile = BitmapFactory.decodeFile(file.getPath());
+            if (tile == null) {
+                tile = bannerTile(c, pkg);
+                if (tile == null) tile = iconTile(c, pkg);
+                Bitmap drawn = tile;
+                TILE_SAVER.execute(() -> saveTile(drawn, file));
+            }
+        }
         tile.setHasMipMap(true);
         TILES.put(cacheKey, tile);
         return tile;
+    }
+
+    private static final java.util.concurrent.ExecutorService TILE_SAVER = java.util.concurrent.Executors.newSingleThreadExecutor();
+
+    /** The file for an app's drawn TV art: a new one when the app is updated (its art may have changed). */
+    private static File tileFile(Context c, String pkg) {
+        long updated = 0;
+        try {
+            updated = c.getPackageManager().getPackageInfo(pkg, 0).lastUpdateTime;
+        } catch (PackageManager.NameNotFoundException ignored) {
+        }
+        return new File(new File(c.getCacheDir(), "tiles"), pkg + "-" + updated + "-v1.png");
+    }
+
+    private static void saveTile(Bitmap tile, File file) {
+        File dir = file.getParentFile();
+        //noinspection ResultOfMethodCallIgnored
+        dir.mkdirs();
+        String pkg = file.getName().substring(0, file.getName().lastIndexOf('-', file.getName().lastIndexOf("-v") - 1));
+        File[] old = dir.listFiles((d, name) -> name.startsWith(pkg + "-") && !name.equals(file.getName()));
+        if (old != null) {
+            //noinspection ResultOfMethodCallIgnored
+            for (File f : old) f.delete();   // the art of an older version of the app
+        }
+        File tmp = new File(dir, file.getName() + ".tmp");
+        try (FileOutputStream out = new FileOutputStream(tmp)) {
+            tile.compress(Bitmap.CompressFormat.PNG, 100, out);
+        } catch (IOException | RuntimeException e) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            return;
+        }
+        //noinspection ResultOfMethodCallIgnored
+        tmp.renameTo(file);
     }
 
     /** The app's official TV art (the Android TV banner), at the highest density the app has. */

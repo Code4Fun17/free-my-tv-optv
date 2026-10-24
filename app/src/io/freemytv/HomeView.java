@@ -398,8 +398,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     HomeView(Activity a) {
         super(a);
+        long started = SystemClock.uptimeMillis();
         activity = a;
-        data = HomeData.get(a);
+        // The slow reads of a cold start (package queries, TV art, the TV's inputs, the saved forecast: ~1 s on a TV,
+        // one after the other), side by side on other threads while this one builds the layers.
+        Context app = a.getApplicationContext();
+        java.util.concurrent.ExecutorService start = java.util.concurrent.Executors.newFixedThreadPool(3);
+        java.util.concurrent.Future<HomeData> dataLoad = start.submit(() -> HomeData.get(app));
+        java.util.concurrent.Future<List<HomeApps.Item>> shelfLoad = start.submit(() -> HomeApps.shelfLast(app));
+        // The drawer (the TV's inputs: slow to ask) isn't on screen yet: its items come in when they're read.
+        start.execute(() -> {
+            List<HomeApps.Item> d = drawerList(app);
+            handler.post(() -> { if (drawerItems.isEmpty()) setDrawerItems(d); });
+        });
+        start.shutdown();
         recs = Recs.get(a);
         click = new Click(a);
         shelfVisible = HomeApps.shelfVisible(a);
@@ -429,6 +441,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         setContentDescription("Free My TV");
         drawerLayer.setVisibility(INVISIBLE);
         fxLayer.setVisibility(INVISIBLE);
+        data = join(dataLoad);
         for (int i = 0; i < topFocus.length; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
             topRects[i] = new RectF();
@@ -444,9 +457,24 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         scene.setMotion(0.6f, 0f);
         updatePalette();
         // First time: right away (a cold start opens with the apps already there); missing logos come from reload().
-        setShelf(HomeApps.shelf(a, false));
+        setShelf(join(shelfLoad));
         setStatusItems(statusList(a));
-        setDrawerItems(drawerList(a));
+        AppLog.w("home: built in " + (SystemClock.uptimeMillis() - started) + " ms");
+    }
+
+    /** A cold start's read, waited for (its failure is this one's: the Watchdog counts it like any other). */
+    private static <T> T join(java.util.concurrent.Future<T> f) {
+        try {
+            return f.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            if (cause instanceof Error) throw (Error) cause;
+            throw new IllegalStateException(cause);
+        }
     }
 
     // MARK: - Lifecycle (called by HomeActivity)

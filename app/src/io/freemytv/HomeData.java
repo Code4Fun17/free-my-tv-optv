@@ -299,6 +299,8 @@ final class HomeData {
         JSONObject o = new JSONObject(body);
         TimeZone zone = TimeZone.getTimeZone(o.optString("timezone", TimeZone.getDefault().getID()));
         Weather w = new Weather();
+        SimpleDateFormat at = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US);
+        at.setTimeZone(zone);
         JSONObject current = o.getJSONObject("current");
         w.temp = current.getDouble("temperature_2m");
         w.code = current.getInt("weather_code");
@@ -306,13 +308,13 @@ final class HomeData {
         JSONObject daily = o.getJSONObject("daily");
         w.max = daily.getJSONArray("temperature_2m_max").getDouble(0);
         w.min = daily.getJSONArray("temperature_2m_min").getDouble(0);
-        w.sunrise = localTime(daily.getJSONArray("sunrise").getString(0), zone);
-        w.sunset = localTime(daily.getJSONArray("sunset").getString(0), zone);
+        w.sunrise = localTime(daily.getJSONArray("sunrise").getString(0), at);
+        w.sunset = localTime(daily.getJSONArray("sunset").getString(0), at);
         JSONArray dates = daily.optJSONArray("time"), rises = daily.getJSONArray("sunrise"), sets = daily.getJSONArray("sunset");
         for (int i = 0; dates != null && i < dates.length(); i++) {
-            w.days.add(localTime(dates.getString(i) + "T00:00", zone));
-            w.daySunrise.add(rises.isNull(i) ? 0L : localTime(rises.getString(i), zone));
-            w.daySunset.add(sets.isNull(i) ? 0L : localTime(sets.getString(i), zone));
+            w.days.add(localTime(dates.getString(i) + "T00:00", at));
+            w.daySunrise.add(rises.isNull(i) ? 0L : localTime(rises.getString(i), at));
+            w.daySunset.add(sets.isNull(i) ? 0L : localTime(sets.getString(i), at));
         }
         JSONObject hourly = o.optJSONObject("hourly");
         if (hourly != null) {
@@ -322,9 +324,9 @@ final class HomeData {
             JSONArray days = hourly.optJSONArray("is_day");
             long now = System.currentTimeMillis();
             for (int i = 0; i < times.length(); i++) {   // every hour from now to the end of the forecast
-                long at = localTime(times.getString(i), zone);
-                if (at <= now) continue;
-                w.hours.add(at);
+                long hour = localTime(times.getString(i), at);
+                if (hour <= now) continue;
+                w.hours.add(hour);
                 w.hourTemp.add(temps.getDouble(i));
                 w.hourCode.add(codes.getInt(i));
                 w.hourDay.add(days == null || days.optInt(i, 1) == 1);
@@ -377,10 +379,8 @@ final class HomeData {
         }
     }
 
-    private static long localTime(String iso, TimeZone zone) throws ParseException {
-        SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US);
-        f.setTimeZone(zone);
-        return f.parse(iso).getTime();
+    private static long localTime(String iso, SimpleDateFormat at) throws ParseException {
+        return at.parse(iso).getTime();
     }
 
     static List<String[]> findCity(String name) throws Exception {
