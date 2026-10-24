@@ -7,6 +7,7 @@ import android.os.Looper;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.xmlpull.v1.XmlPullParser;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -21,6 +22,7 @@ import java.text.NumberFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -44,16 +46,17 @@ final class HomeData {
         return CURRENCY.equals("USD") || inDollars ? "USDT" : CURRENCY;
     }
     private static final String WEATHER_QUERY = "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
-            + "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2";
+            + "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=7";
 
+    /** The forecast's place (and length: a cached 2-day forecast is fetched again as a week). */
     private static String weatherPlace() {
-        return Prefs.latitude() + "," + Prefs.longitude();
+        return Prefs.latitude() + "," + Prefs.longitude() + ",7d";
     }
 
     private static String weatherUrl() {
         return "https://api.open-meteo.com/v1/forecast?latitude=" + Prefs.latitude() + "&longitude=" + Prefs.longitude() + WEATHER_QUERY;
     }
-    private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
+    private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L, NEWS_EVERY = 15 * 60_000L;
     interface Listener { void onData(); }
 
     /** BTC, ETH and SOL; in Brazilian reais also the dollar (USDT/BRL), which Binance doesn't list for most currencies. */
@@ -81,10 +84,25 @@ final class HomeData {
         return a;
     }
 
+    /** A news headline from the feed (config.properties "show_news" and "news_feed"). */
+    static final class Headline {
+        final String title, source, link;
+        final long at;
+
+        Headline(String title, String source, String link, long at) {
+            this.title = title;
+            this.source = source;
+            this.link = link;
+            this.at = at;
+        }
+    }
+
     /** Settings changed (city, coins): fetch again now. */
     void settingsChanged() {
         pricesAt = 0;
         weatherAt = 0;
+        newsAt = 0;
+        newsFailedAt = 0;
         pricesFailedAt = 0;
         weatherFailedAt = 0;
     }
@@ -129,6 +147,8 @@ final class HomeData {
         final List<Double> hourTemp = new ArrayList<>();
         final List<Integer> hourCode = new ArrayList<>();
         final List<Boolean> hourDay = new ArrayList<>();
+        // Every day of the forecast (today first): its local midnight, sunrise and sunset, in epoch ms.
+        final List<Long> days = new ArrayList<>(), daySunrise = new ArrayList<>(), daySunset = new ArrayList<>();
     }
 
     private static HomeData instance;
@@ -141,15 +161,16 @@ final class HomeData {
     final double[] prices = {Double.NaN, Double.NaN, Double.NaN, Double.NaN};
     /** 24 h change (%), in the same order. */
     final double[] changes = {Double.NaN, Double.NaN, Double.NaN, Double.NaN};
-    volatile long pricesAt, weatherAt;
+    volatile long pricesAt, weatherAt, newsAt;
     volatile Weather weather = new Weather();
+    volatile List<Headline> news = Collections.emptyList();
 
     private final SharedPreferences cache;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
-    private volatile boolean fetchingPrices, fetchingWeather;
-    private volatile long pricesFailedAt, weatherFailedAt;
+    private volatile boolean fetchingPrices, fetchingWeather, fetchingNews;
+    private volatile long pricesFailedAt, weatherFailedAt, newsFailedAt;
     /** The city of the forecast in memory: another process (ScreensaverAlone) can see the city change under it. */
     private volatile String weatherFor = "";
 
@@ -168,6 +189,11 @@ final class HomeData {
                 weather = parseWeather(w);
                 weatherAt = cache.getLong("weatherAt", 0);
                 weatherFor = weatherPlace();
+            }
+            if (Config.SHOW_NEWS && Config.NEWS_FEED.equals(cache.getString("newsFeed", ""))) {
+                String n = cache.getString("news", null);
+                if (n != null) news = parseNews(n);
+                newsAt = cache.getLong("newsAt", 0);
             }
         } catch (Exception ignored) {}
     }
@@ -225,6 +251,25 @@ final class HomeData {
                 }
             });
         }
+        if (Config.SHOW_NEWS && !fetchingNews && (now - newsAt > NEWS_EVERY || now < newsAt) && !failedRecently(newsFailedAt, now)) {
+            fetchingNews = true;
+            io.execute(() -> {
+                try {
+                    String body = get(Config.NEWS_FEED);
+                    List<Headline> list = parseNews(body);
+                    if (list.isEmpty()) throw new IOException("no headlines");
+                    news = list;
+                    newsAt = System.currentTimeMillis();
+                    cache.edit().putString("news", body).putLong("newsAt", newsAt).putString("newsFeed", Config.NEWS_FEED).apply();
+                    notifyListeners();
+                } catch (Exception e) {
+                    newsFailedAt = System.currentTimeMillis();
+                    AppLog.w("news: " + e.getMessage());
+                } finally {
+                    fetchingNews = false;
+                }
+            });
+        }
     }
 
     private static boolean failedRecently(long at, long now) {
@@ -267,6 +312,12 @@ final class HomeData {
         w.min = daily.getJSONArray("temperature_2m_min").getDouble(0);
         w.sunrise = localTime(daily.getJSONArray("sunrise").getString(0), zone);
         w.sunset = localTime(daily.getJSONArray("sunset").getString(0), zone);
+        JSONArray dates = daily.optJSONArray("time"), rises = daily.getJSONArray("sunrise"), sets = daily.getJSONArray("sunset");
+        for (int i = 0; dates != null && i < dates.length(); i++) {
+            w.days.add(localTime(dates.getString(i) + "T00:00", zone));
+            w.daySunrise.add(rises.isNull(i) ? 0L : localTime(rises.getString(i), zone));
+            w.daySunset.add(sets.isNull(i) ? 0L : localTime(sets.getString(i), zone));
+        }
         JSONObject hourly = o.optJSONObject("hourly");
         if (hourly != null) {
             JSONArray times = hourly.getJSONArray("time");
@@ -274,7 +325,7 @@ final class HomeData {
             JSONArray codes = hourly.getJSONArray("weather_code");
             JSONArray days = hourly.optJSONArray("is_day");
             long now = System.currentTimeMillis();
-            for (int i = 0; i < times.length() && w.hours.size() < 6; i++) {
+            for (int i = 0; i < times.length(); i++) {   // every hour from now to the end of the forecast
                 long at = localTime(times.getString(i), zone);
                 if (at <= now) continue;
                 w.hours.add(at);
@@ -284,6 +335,50 @@ final class HomeData {
             }
         }
         return w;
+    }
+
+    /** The first 30 items of an RSS feed. Google News ends each title with " - Source": that part goes to source. */
+    private static List<Headline> parseNews(String body) throws Exception {
+        XmlPullParser p = android.util.Xml.newPullParser();
+        p.setInput(new java.io.StringReader(body));
+        List<Headline> out = new ArrayList<>();
+        String title = null, source = null, link = null;
+        long at = 0;
+        boolean item = false;
+        for (int e = p.getEventType(); e != XmlPullParser.END_DOCUMENT && out.size() < 30; e = p.next()) {
+            if (e == XmlPullParser.START_TAG) {
+                String n = p.getName();
+                if ("item".equals(n)) {
+                    item = true;
+                    title = source = link = null;
+                    at = 0;
+                } else if (item && "title".equals(n)) {
+                    title = p.nextText().trim();
+                } else if (item && "link".equals(n)) {
+                    link = p.nextText().trim();
+                } else if (item && "source".equals(n)) {
+                    source = p.nextText().trim();
+                } else if (item && "pubDate".equals(n)) {
+                    at = rssTime(p.nextText().trim());
+                }
+            } else if (e == XmlPullParser.END_TAG && "item".equals(p.getName())) {
+                item = false;
+                if (title == null || title.isEmpty()) continue;
+                if (source != null && !source.isEmpty() && title.endsWith(" - " + source)) {
+                    title = title.substring(0, title.length() - source.length() - 3).trim();
+                }
+                out.add(new Headline(title, source == null ? "" : source, link == null ? "" : link, at));
+            }
+        }
+        return out;
+    }
+
+    private static long rssTime(String s) {
+        try {
+            return new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).parse(s).getTime();
+        } catch (ParseException e) {
+            return 0;
+        }
     }
 
     private static long localTime(String iso, TimeZone zone) throws ParseException {

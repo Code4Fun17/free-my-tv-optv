@@ -192,10 +192,16 @@ final class HomeApps {
         return null;
     }
 
-    /** The shelf's packages in order: the user's list (Settings > Shelf), or the built-in one. */
+    /**
+     * The shelf's packages in order: the user's list (Settings > Shelf), or every TV app: the ones from SHELF first,
+     * then the rest by name (low-memory TVs keep the first FEW_APPS of SHELF only).
+     */
     static List<String> shelfPackages(Context c) {
         List<String> custom = Prefs.shelf();
-        if (custom != null) return custom;
+        if (custom != null) {
+            custom.removeAll(shelfHidden());
+            return custom;
+        }
         List<String> out = new ArrayList<>();
         Set<String> keys = new HashSet<>();
         PackageManager pm = c.getPackageManager();
@@ -205,6 +211,19 @@ final class HomeApps {
                 out.add(d[2]);
             }
         }
+        if (lowRam(c)) return out;
+        List<String> live = java.util.Arrays.asList(LIVE_TV_APPS);
+        Set<String> off = shelfHidden();
+        for (String[] app : shelfCandidates(c)) {
+            if (known(app[0]) == null && !live.contains(app[0]) && !off.contains(app[0])) out.add(app[0]);
+        }
+        return out;
+    }
+
+    /** config.properties "shelf_hide": packages never on the shelf, even one arranged in Settings (still in All Apps). */
+    private static Set<String> shelfHidden() {
+        Set<String> out = new HashSet<>();
+        for (String pkg : Config.SHELF_HIDE.split(",")) if (!pkg.trim().isEmpty()) out.add(pkg.trim());
         return out;
     }
 

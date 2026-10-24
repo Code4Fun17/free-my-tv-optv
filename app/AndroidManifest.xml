@@ -109,6 +109,17 @@
             </intent-filter>
         </activity>
 
+        <!-- A story from the News card (config.properties "show_news"), in a WebView. -->
+        <activity
+            android:name=".NewsActivity"
+            android:process=":home"
+            android:exported="false"
+            android:label="News"
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
         <!-- Fire TV: the same home screen opened as a regular app (no resumeWhilePausing, which leaves window focus on
              Amazon's paused launcher on Fire OS). -->
         <activity

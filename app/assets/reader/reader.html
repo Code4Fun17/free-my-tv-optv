@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #121214; color: #e9e9ec; overflow: hidden; }
+  body { font: 18px/1.5 -apple-system, "Roboto", "Noto Sans", sans-serif; }
+  #box { position: absolute; left: 56px; right: 56px; top: 40px; bottom: 64px; overflow: hidden; }
+  /* The columns run on to the right; a page is moved in by sliding them (scrolling stops short on the last page). */
+  #flow { height: 100%; column-count: 3; column-gap: 48px; column-fill: auto; transition: transform 0.25s ease-out; }
+  .site { color: #9a9aa2; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; margin: 0 0 10px; }
+  h1 { font-size: 28px; line-height: 1.22; margin: 0 0 18px; color: #fff; }
+  img { display: block; width: 100%; max-height: 36vh; object-fit: cover; border-radius: 14px; margin: 0 0 18px; break-inside: avoid; }
+  p { margin: 0 0 14px; }
+  h2, h3 { font-size: 21px; line-height: 1.3; margin: 18px 0 10px; color: #fff; break-after: avoid; }
+  blockquote { margin: 0 0 14px; padding-left: 16px; border-left: 3px solid #5a5a62; color: #c9c9cf; }
+  #bar { position: absolute; left: 56px; right: 56px; bottom: 18px; display: flex; justify-content: space-between;
+    color: #8e8e96; font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="box"><div id="flow">{{content}}</div></div>
+<div id="bar"><span>◀ ▶ turn the page · Back to go home</span><span id="pg"></span></div>
+<script>
+  var box = document.getElementById('box'), flow = document.getElementById('flow'), gap = 48, page = 0;
+  function pages() { return Math.max(1, Math.ceil((flow.scrollWidth - 2) / (box.clientWidth + gap))); }
+  function go(d) {
+    var n = pages();
+    page = Math.max(0, Math.min(n - 1, page + d));
+    flow.style.transform = 'translateX(' + (-page * (box.clientWidth + gap)) + 'px)';
+    document.getElementById('pg').textContent = 'Page ' + (page + 1) + ' of ' + n;
+  }
+  window.frm = { next: function () { go(1); }, prev: function () { go(-1); } };
+  go(0);
+  window.addEventListener('load', function () { go(0); });   // the picture's height is known now
+</script>
+</body>
+</html>
