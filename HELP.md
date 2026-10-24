@@ -138,6 +138,27 @@ Repeat steps 1 and 2 and compare. On a 2 GB TV tested with six apps added, the h
 13 fewer processes started (62 → 49), and the background start-ups ended about 6 s sooner. One boot can vary from the
 next by a second or so: for a fair comparison, measure two or three boots each way.
 
+## If adb loses the TV
+
+Restarting the TV (or adb itself) can leave the connection in a stale state: `adb devices` lists the TV as
+`offline` or `unauthorized`, or commands hang, even though the TV still trusts this computer and shows no
+*Allow USB debugging?* prompt. A clean restart of adb's background server and a fresh connect fixes it:
+
+```bash
+adb kill-server
+adb connect 192.168.1.50:5555
+adb devices
+```
+
+`device` means it's back. If it still says `unauthorized`:
+
+- Look at the TV: a prompt may be waiting. Tick *Always allow from this computer* and accept.
+- adb identifies your computer with a key in `.android` (in your user folder, or the folder `ANDROID_SDK_HOME` or
+  `ANDROID_USER_HOME` points to). A shell that finds a different key looks like a new computer to the TV, so use the
+  same one each time.
+- After a restart, give the TV a minute to join the network before connecting. If it never answers, check that
+  network debugging (or *Wireless debugging*, on newer Google TV) is still on in its developer options.
+
 ## Undo
 
 - Everything at once: *Free My TV* → *Home Screen* → *Original* turns every app Free My TV turned off back on,
