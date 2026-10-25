@@ -107,7 +107,10 @@ final class GoogleNews {
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 byte[] buffer = new byte[16384];
                 int n;
-                while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+                while ((n = in.read(buffer)) > 0) {
+                    out.write(buffer, 0, n);
+                    if (out.size() > HomeData.MAX_ANSWER) throw new IOException("answer over 2 MB");
+                }
                 return out.toString(StandardCharsets.UTF_8.name());
             }
         } finally {

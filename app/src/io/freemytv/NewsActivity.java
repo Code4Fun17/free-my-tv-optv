@@ -154,10 +154,17 @@ public final class NewsActivity extends Activity {
         s.setLoadWithOverviewMode(true);
         s.setTextZoom(100);
         s.setMediaPlaybackRequiresUserGesture(true);
+        s.setAllowFileAccess(false);     // a page never reaches the TV's files or the apps' content
+        s.setAllowContentAccess(false);
         CookieManager.getInstance().setAcceptThirdPartyCookies(w, false);   // no ad and tracking cookies
         w.setBackgroundColor(0xFF121214);
         w.setVisibility(View.INVISIBLE);
         w.setWebViewClient(new WebViewClient() {
+            /** Only https pages open here; any other address (http, intent:, file:, an app's own) goes nowhere. */
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return !"https".equals(request.getUrl().getScheme());
+            }
+
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 return blocked(request) ? empty() : null;
             }
@@ -349,6 +356,9 @@ public final class NewsActivity extends Activity {
             web.clearHistory();
             web.clearFormData();
             WebStorage.getInstance().deleteAllData();
+            CookieManager cookies = CookieManager.getInstance();   // the sites' cookies too: the next story starts unknown
+            cookies.removeAllCookies(null);
+            cookies.flush();
             web.destroy();
         }
         super.onDestroy();

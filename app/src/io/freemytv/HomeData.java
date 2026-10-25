@@ -416,6 +416,9 @@ final class HomeData {
         return out;
     }
 
+    /** The most any answer may be (a week of weather is ~40 KB, a news feed ~100 KB). */
+    static final int MAX_ANSWER = 2 * 1024 * 1024;
+
     private static String get(String url) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(6000);
@@ -427,7 +430,10 @@ final class HomeData {
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 byte[] buffer = new byte[8192];
                 int n;
-                while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+                while ((n = in.read(buffer)) > 0) {
+                    out.write(buffer, 0, n);
+                    if (out.size() > MAX_ANSWER) throw new IOException("answer over 2 MB");   // a broken or hostile server
+                }
                 return out.toString(StandardCharsets.UTF_8.name());
             }
         } finally {

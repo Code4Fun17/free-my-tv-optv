@@ -260,7 +260,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Paint hourNow, hourNowTemp;   // the hour we're in: bold
     private Paint pricePaint, changePaint, sheetTitle, newsPaint, conditionPaint, topInfoPaint;
     private final Paint fxPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private int fxFrames;
+    /**
+     * The weather icon moves at 2 frames a second, and rests 30 s after the last key (any key wakes it): drawn every
+     * other frame it kept ~18% of a core busy while the drawer was open.
+     */
+    private static final long FX_EVERY = 500, FX_REST = 30_000;
+    private long fxAt, keyAt;
     private TextPaint titlePaint, gridLabel, toastPaint;
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint imagePaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
@@ -378,10 +383,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     };
 
-    /** Download speed (all of the TV's traffic), every 2 s; only the open drawer is redrawn for it. */
+    /**
+     * Download speed (all of the TV's traffic), only while the drawer (which shows it) is open: a first reading as it
+     * opens, the speed a second later, then every 2 s.
+     */
     private final Runnable speedTick = new Runnable() {
         @Override public void run() {
-            if (!running) return;
+            if (!running || !drawerOpen) return;
+            boolean first = rxBytes < 0;
             long bytes = TrafficStats.getTotalRxBytes(), at = SystemClock.elapsedRealtime();
             String text = "";
             if (bytes != TrafficStats.UNSUPPORTED && rxBytes >= 0 && at > rxAt) {
@@ -393,12 +402,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             rxAt = at;
             if (!text.equals(speedText)) {
                 speedText = text;
-                if (drawerOpen) {
-                    drawerDirty = true;
-                    platter.invalidate();
-                }
+                drawerDirty = true;
+                platter.invalidate();
             }
-            handler.postDelayed(this, 2000);
+            handler.postDelayed(this, first ? 1000 : 2000);
         }
     };
 
@@ -503,8 +510,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Photos.importInbox(getContext(), ownReady);   // photos a computer just sent
         if (tvInputs != null) tvInputs.registerCallback(inputCallback, handler);
         handler.postDelayed(tick, 15_000);
-        rxBytes = -1;
-        handler.post(speedTick);
+        if (drawerOpen) watchSpeed();
         checkNotices();
         if (!again) reload();
         updatePalette();
@@ -804,8 +810,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (drawerItemsMoving || drawerDirty || bgFading) {
             drawerLayer.invalidate();
             fxLayer.invalidate();
-        } else if (drawerOpen && Prefs.weather() && (++fxFrames & 1) == 0) {
-            fxLayer.invalidate();   // 30 fps is plenty for the weather icon
+        } else if (drawerOpen && Prefs.weather() && up - fxAt >= FX_EVERY && up - keyAt < FX_REST) {
+            fxAt = up;
+            fxLayer.invalidate();
         }
         if (gridMoving || gridDirty) sheetLayer.invalidate();
         if (drawerMoving || bgFading) sky.invalidate();
@@ -1644,9 +1651,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         drawerDirty = true;
     }
 
+    private void watchSpeed() {
+        handler.removeCallbacks(speedTick);
+        rxBytes = -1;
+        handler.post(speedTick);
+    }
+
     private void openDrawer() {
         if (drawerItems.isEmpty()) return;
         drawerOpen = true;
+        watchSpeed();
         drawer.target = 1;
         zone = Z_DRAWER;
         drawerIndex = shelf.isEmpty() ? 0 : nearest(drawerRects, tileRects[shelfIndex].centerX());
@@ -1656,6 +1670,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void closeDrawer() {
         drawerOpen = false;
+        handler.removeCallbacks(speedTick);
         drawer.target = 0;
         zone = Z_SHELF;
         for (Spring f : drawerFocus) f.snap(0);   // the drawer goes away: its focus doesn't need to animate
@@ -2513,6 +2528,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     boolean onKey(KeyEvent e) {
         wake();
+        keyAt = SystemClock.uptimeMillis();
         boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
         if (reordering) return reorderKey(e, down);
         int code = e.getKeyCode();
