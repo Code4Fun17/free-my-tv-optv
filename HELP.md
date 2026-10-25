@@ -8,6 +8,8 @@ first minute after switching on feels slow.
 This guide measures your TV's boot first, so you turn off only what actually starts at boot and that you don't use,
 then measures again to see the difference. It works on any Google TV or Android TV that Free My TV runs on.
 
+Also here: [the remote's battery on the home screen](#the-remotes-battery-on-the-home-screen) (`top_info`).
+
 **Before you start**
 
 - A computer on the same network as the TV, with `adb` (see [Install](README.md#install)) and a bash shell (macOS,
@@ -162,6 +164,51 @@ adb devices
   same one each time.
 - After a restart, give the TV a minute to join the network before connecting. If it never answers, check that
   network debugging (or *Wireless debugging*, on newer Google TV) is still on in its developer options.
+
+## The remote's battery on the home screen
+
+With `top_info=true` in `config.properties`, the top right of the home screen shows one line of text in place of
+the three round buttons: `Remote 58%  ·  Sun, 25 Oct  ·  2:24 PM`. The date and time change once a minute.
+
+**Where the number comes from.** On Android 11 and older, the TV doesn't show apps the battery level of a Bluetooth
+remote. Most Bluetooth remotes report it themselves, the same way a Bluetooth keyboard does, and Free My TV asks the
+remote for it directly.
+
+**When it's read.** To save its battery, the remote only stays connected for about 40 seconds after you press a
+key, so Free My TV asks while it's connected:
+
+- when the home screen opens, about 1.5 s after the Home button;
+- about 2 s after a key on the home screen;
+- about 2.5 s after the remote reconnects while another app is open.
+
+It asks at most every 30 minutes, or 5 minutes after a read that didn't work. The last level is saved, so it shows
+straight away after a restart or an update. `Remote` and the percentage are left out until the first read has
+worked.
+
+**The first read** picks the first paired remote or keyboard that's connected. From then on Free My TV asks only
+that remote, so headphones or a phone paired to the TV are never asked.
+
+**If the battery doesn't show:**
+
+1. Press a key on the remote, wait a few seconds, then press Home.
+2. Check that the TV sees the remote as connected. Your remote is listed with its name:
+
+   ```bash
+   adb shell dumpsys bluetooth_manager
+   ```
+
+3. Failed reads are logged, successful ones are not. A failure line starts with `remote battery:` and gives the
+   reason: `no battery service` means the remote doesn't report a battery level; `no answer in 8 s` means it went to
+   sleep first.
+
+   ```bash
+   adb logcat -d -s FreeMyTV
+   ```
+
+4. On Android 12 and newer, Free My TV may need the *Nearby devices* permission for it, under Settings → Apps →
+   Free My TV → Permissions.
+
+**Not on:** `top_info=false` (the default) keeps the round buttons and never uses Bluetooth.
 
 ## Undo
 
