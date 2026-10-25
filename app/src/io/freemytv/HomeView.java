@@ -258,7 +258,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Paint labelPaint, metaPaint, clockPaint, buttonPaint, capsuleText, tipPaint, quotePaint, staleQuote;
     private Paint rowTitle, drawerLabel, cardTitle, cardText, cardDim, cardDimRight, bigTemp, hourPaint, hourTemp;
     private Paint hourNow, hourNowTemp;   // the hour we're in: bold
-    private Paint pricePaint, changePaint, sheetTitle, newsPaint, conditionPaint;
+    private Paint pricePaint, changePaint, sheetTitle, newsPaint, conditionPaint, topInfoPaint;
     private final Paint fxPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int fxFrames;
     private TextPaint titlePaint, gridLabel, toastPaint;
@@ -456,7 +456,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             cardFocus[i] = new Spring(0.32f, 0.78f, 0);
             cardRects[i] = new RectF();
         }
-        setLightButtons(HomeApps.topButtons());
+        setLightButtons(topButtons());
         recs.setLight(true);
         checkNight(false);
         sheetLayer.setVisibility(INVISIBLE);
@@ -713,6 +713,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lCardMeta = Ui.text(Ui.semibold, 25 * k, L_DIM);
         lQuote = Ui.numbers(Ui.medium, 24 * k, L_FAINT);
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
+        topInfoPaint = Ui.numbers(Ui.semibold, 25 * k, L_INK);   // fixed-width digits: the pill doesn't wobble each second
         lTip.setTextAlign(Paint.Align.CENTER);
         lDate = Ui.text(Ui.semibold, 34 * k, L_DIM);
         lClock = Ui.numbers(Ui.light, 200 * k, L_INK);
@@ -2482,7 +2483,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             final List<HomeApps.Item> st = statusList(c);
             final List<HomeApps.Item> d = drawerList(c);
             final List<HomeApps.Item> o = apps ? HomeApps.others(c) : null;
-            final List<HomeApps.Item> top = apps ? HomeApps.topButtons() : null;   // they change with Prefs too
+            final List<HomeApps.Item> top = apps ? topButtons() : null;   // they change with Prefs too
             handler.post(() -> {
                 if (top != null) setLightButtons(top);
                 if (s != null) setShelf(s);
@@ -3570,8 +3571,52 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * The round buttons (Live TV, HDMI Inputs and Settings by default): icon-only glass circles (light by day, smoked at
      * night); the focused one turns white with a dark icon (the tvOS focus) and its name appears below it.
      */
+    /** The round buttons at the top right, or none with config.properties "top_info" (the info pill is there). */
+    private static List<HomeApps.Item> topButtons() {
+        return Config.TOP_INFO ? new ArrayList<>() : HomeApps.topButtons();
+    }
+
+    private String topInfoText = "";
+    private long topInfoMinute = -1;
+
+    /** The remote's battery changed (RemoteBattery): the pill again. */
+    void topInfoChanged() {
+        topInfoMinute = -1;
+        statusDirty = true;
+        status.invalidate();
+    }
+
+    /**
+     * "Remote 58%  ·  Sun, 25 Oct  ·  2:15 PM" (the battery once the remote has told it), made again each minute:
+     * updateClock redraws the pill then, so nothing ticks every second.
+     */
+    private String topInfo() {
+        long now = System.currentTimeMillis(), minute = now / 60_000;
+        if (minute == topInfoMinute) return topInfoText;
+        topInfoMinute = minute;
+        String text = new java.text.SimpleDateFormat("EEE, d MMM", Ui.locale()).format(now) + "   ·   "
+                + Ui.datePattern("format|h:mm a").format(now);   // not Ui.time: it keeps every value it made
+        int battery = RemoteBattery.last;
+        topInfoText = battery >= 0 ? Ui.trf("Remote {n}%", "n", battery) + "   ·   " + text : text;
+        return topInfoText;
+    }
+
+    /** The info line: text right-aligned where the round buttons were, never focused. */
+    private void drawTopInfo(Canvas c) {
+        String text = topInfo();
+        float right = CONTENT_R * k, cy = L_BUTTON_CY * k;
+        topInfoPaint.setColor(tone(L_INK, 0xEBFFFFFF));
+        // Only the text, no glass: a soft shadow keeps it readable over a bright backdrop.
+        topInfoPaint.setShadowLayer(6 * k, 0, 2 * k, Ui.alpha(0xFF000000, tone(0.25f, 0.6f)));
+        c.drawText(text, right - topInfoPaint.measureText(text), cy + Ui.halfCap(topInfoPaint), topInfoPaint);
+    }
+
     private void drawLightButtons(Canvas c) {
         applyTone();
+        if (Config.TOP_INFO) {
+            drawTopInfo(c);
+            return;
+        }
         for (int i = 0; i < lightButtons.size(); i++) {
             HomeApps.Item it = lightButtons.get(i);
             RectF r = topRects[3 + i];

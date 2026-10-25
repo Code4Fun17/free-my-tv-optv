@@ -143,6 +143,7 @@ The first values come from `config.properties`, created by the first build (Goog
 | `show_news` | A news card next to the weather (in place of the crypto prices) | `false` |
 | `news_feed` | The news card's RSS feed; Google News for your country is `https://news.google.com/rss?hl=<language>-<COUNTRY>&gl=<COUNTRY>&ceid=<COUNTRY>:<language>` | `https://news.google.com/rss` |
 | `debloat_extra` | More apps for Free My TV mode to turn off (never uninstall), by package, comma separated: ones your TV starts at every boot that you don't use. The same safety checks apply, and *Original* turns them back on. How to find them: [HELP.md](HELP.md). Google TV only | empty |
+| `top_info` | In place of the three round buttons at the top right (Live TV, the inputs, Settings, all also in the drawer): the remote's battery, today's date and the time, as plain text. The battery is read from the remote while it's awake (when the home screen opens, or a couple of seconds after you use it, in any app), at most every 30 minutes, and kept for after a restart. Google TV only | `false` |
 | `log_buffer` | Android's log buffer size, set again at every boot (Android forgets it), like `1M` or `512K`; for reading what happened at boot (see [HELP.md](HELP.md)). Google TV only | empty (the TV's own) |
 | `shelf_hide` | Apps to leave off the home shelf (they stay in All Apps), by package, comma separated; also applies to a shelf arranged in *Home Settings* → *Shelf*. Google TV only | empty |
 | `currency` | Crypto prices in `USD`, `EUR`, `BRL`… | `USD` |

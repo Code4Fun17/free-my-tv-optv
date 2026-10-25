@@ -16,6 +16,7 @@ import android.widget.TextView;
  */
 public class HomeActivity extends Activity {
     private HomeView home;
+    private android.content.BroadcastReceiver remoteWoke;   // the remote connected (RemoteBattery)
     private int prefsVersion = Prefs.version;   // settings changed while we were away: start over
 
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -38,6 +39,10 @@ public class HomeActivity extends Activity {
         home = new HomeView(this);
         setContentView(home);
         getWindow().setBackgroundDrawable(null);
+        if (Config.TOP_INFO) {
+            RemoteBattery.start(this, home::topInfoChanged);
+            remoteWoke = RemoteBattery.listen(this);
+        }
     }
 
     /**
@@ -64,6 +69,7 @@ public class HomeActivity extends Activity {
         if (home != null) {
             home.covered(false);
             home.resume();
+            if (Config.TOP_INFO) RemoteBattery.soon(1500);   // the Home button just woke the remote
         }
     }
 
@@ -88,6 +94,7 @@ public class HomeActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (remoteWoke != null) unregisterReceiver(remoteWoke);
         if (home != null) home.destroy();
         super.onDestroy();
     }
@@ -98,6 +105,8 @@ public class HomeActivity extends Activity {
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        // The info pill's battery: the remote is connected for a little while after a key, so it's read then.
+        if (Config.TOP_INFO && home != null && event.getAction() == KeyEvent.ACTION_UP) RemoteBattery.soon(2000);
         if (RemoteKeys.onKey(this, event)) return true;
         if (home != null && home.onKey(event)) return true;
         return super.dispatchKeyEvent(event);

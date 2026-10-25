@@ -406,7 +406,7 @@ public class SettingsActivity extends Activity {
             String[] labels = {Ui.tr("Home Screen"), Ui.tr("Screensaver"),
                     Ui.tr("Home Settings"), Ui.tr("Shelf"), Ui.tr("Top Buttons"),
                     Ui.tr("Remote Buttons"), Ui.tr("TV Settings")};
-            String[] values = {working ? "" : mode, Ui.tr("Preview"), "", "", "", "", ""};
+            String[] values = {working ? "" : mode, Ui.tr("Preview"), "", "", Config.TOP_INFO ? Ui.tr("Date, time and Remote") : "", "", ""};
             for (int i = 0; i < labels.length; i++) {
                 float y = (MAIN_TOP + i * (ROW_H + MAIN_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
@@ -1158,6 +1158,8 @@ public class SettingsActivity extends Activity {
                 pickScroll = 0;
             } else if (focus == 3) {
                 openShelfEditor(false);
+            } else if (focus == 4 && Config.TOP_INFO) {
+                return;   // config.properties "top_info": the date, the time and the remote's battery there, nothing to arrange
             } else if (focus == 4) {
                 openShelfEditor(true);
             } else if (focus == 5) {
